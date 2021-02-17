@@ -1,2 +1,2 @@
 # fspipe
-A distributed pipe which uses FUSE, filesystem in user space
+A distributed pipe which uses FUSE, filesystem in user space.
