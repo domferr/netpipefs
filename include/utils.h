@@ -17,6 +17,11 @@
             then;               \
         }
 
+#define NOTZERO(w, then)        \
+        if ((w) != 0) {         \
+            then;               \
+        }
+
 #define MINUS1ERR(w, then)      \
         if ((w) == -1) {        \
             perror(#w);         \

@@ -1,8 +1,8 @@
 CC		= gcc -std=c99
-CFLAGS	= -g -Wall -pedantic -D_POSIX_C_SOURCE=200809L -Wextra \
-		-Wwrite-strings -Wstrict-prototypes -Wold-style-definition \
-		-Wformat=2 -Wno-unused-parameter -Wshadow \
-		-Wredundant-decls -Wnested-externs -Wmissing-include-dirs \
+CFLAGS	= -g -Wall -pedantic -D_POSIX_C_SOURCE=200809L -Wextra 		\
+		-Wwrite-strings -Wstrict-prototypes -Wold-style-definition 	\
+		-Wformat=2 -Wno-unused-parameter -Wshadow 					\
+		-Wredundant-decls -Wnested-externs -Wmissing-include-dirs 	\
 		-D_FILE_OFFSET_BITS=64 `pkg-config fuse --cflags` # richiesto da FUSE
 
 SRCDIR  	= ./src
@@ -15,8 +15,8 @@ INCLUDES 	= -I $(INCDIR)
 LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR)	# richiesto da FUSE
 
 # dipendenze per l'eseguibile
-OBJS_MAIN	=	$(OBJDIR)/main.o	\
-				$(OBJDIR)/scfiles.o	\
+OBJS_MAIN	=	$(OBJDIR)/main.o		\
+				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o
 
 TARGETS	= $(BINDIR)/fspipe
@@ -73,7 +73,7 @@ checkmount:
 	mount | grep fspipe
 
 test: checkmount
-	@printf "[TEST] client writes into $(CLIENT_MOUNTPOINT)/testfile.txt"
+	@printf "[TEST] client writes into $(CLIENT_MOUNTPOINT)/testfile.txt "
 	@echo "Testing client write callback" > $(CLIENT_MOUNTPOINT)/testfile.txt
 	@printf " -> done\n"
 	@printf "[TEST] server reads from $(SERVER_MOUNTPOINT)/testfile.txt"

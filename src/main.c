@@ -54,6 +54,7 @@ static const struct fuse_opt option_spec[] = {
 static void* init_callback(struct fuse_conn_info *conn)
 {
     DEBUG("init() callback\n")
+
     return 0;
 }
 
@@ -65,6 +66,8 @@ static void* init_callback(struct fuse_conn_info *conn)
 static void destroy_callback(void *privatedata)
 {
     DEBUG("destroy() callback\n")
+    int *fd_skt = (int*) privatedata;
+    socket_close(*fd_skt);
 }
 
 /** Get file attributes.
@@ -143,8 +146,23 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
-    //TODO open the connection with the client/server
+    int *fd_skt = (int*)(fuse_get_context()->private_data);
+    if (*fd_skt != -1) return 0;    //connection already established
 
+    MINUS1(*fd_skt = socket_init(), perror("socket_init()"); return errno)
+
+    if (IS_SERVER) {
+        int fd_client;
+        NOTZERO(socket_listen(*fd_skt), perror("socket_listen()"); return errno)
+        MINUS1(fd_client = socket_accept(*fd_skt), perror("socket_accept()"); return -errno)
+        fi->fh = fd_client;
+        DEBUG("%s\n", "Accepted connection with client")
+    } else {
+        MINUS1(socket_connect(*fd_skt), perror("socket_connect()"); return -errno)
+        DEBUG("%s\n", "Connected with the server")
+    }
+
+    fuse_get_context()->private_data = fd_skt;
     return 0;
 }
 
@@ -213,7 +231,6 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
-    //TODO close the connection with the client/server
     return 0;
 }
 
@@ -232,7 +249,7 @@ static int truncate_callback(const char *path, off_t offset) {
 }
 
 static struct fuse_operations my_operations = {
-    .init = init_callback,
+    //.init = init_callback,
     .destroy = destroy_callback,
     .getattr = getattr_callback,
     .open = open_callback,
@@ -258,11 +275,11 @@ int main(int argc, char** argv) {
     /* Set defaults -- we have to use strdup so that
 	   fuse_opt_parse can free the defaults if other
 	   values are specified */
-    options.endpoint = DEFAULT_ENDPOINT;
+    options.endpoint = NULL;
     options.port = DEFAULT_PORT;
 
     /* Parse options */
-    MINUS1(fuse_opt_parse(&args, &options, option_spec, NULL), return 1)
+    MINUS1(fuse_opt_parse(&args, &options, option_spec, NULL), return errno)
 
     /* When --help is specified, first print our own file-system
        specific help text, then signal fuse_main to show
@@ -271,7 +288,7 @@ int main(int argc, char** argv) {
        string) */
     if (options.show_help) {
         show_help(argv[0]);
-        MINUS1(fuse_opt_add_arg(&args, "--help"), return 1)
+        MINUS1(fuse_opt_add_arg(&args, "--help"), return errno)
         args.argv[0][0] = '\0'; //setting argv[0] to the empty string
     }
 
@@ -281,13 +298,17 @@ int main(int argc, char** argv) {
         DEBUG("FSPipe running as client with endpoint %s:%d\n", options.endpoint, options.port)
     }
 
-    int fuse_stat = fuse_main(args.argc, args.argv, &my_operations, NULL);
-    DEBUG("fuse_main returned %d\n", fuse_stat)
+    int *fd_skt = malloc(sizeof(int));
+    EQNULL(fd_skt, perror("malloc()"); return errno)
+    *fd_skt = -1;
+    int ret;
+    NOTZERO(ret = fuse_main(args.argc, args.argv, &my_operations, fd_skt), perror("fuse_main()"))
+
     if (IS_SERVER)
         DEBUG("server cleanup\n")
     else
         DEBUG("client cleanup\n")
 
     fuse_opt_free_args(&args);  //TODO handle program cleanup
-    return fuse_stat;
+    return ret;
 }

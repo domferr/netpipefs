@@ -1,15 +1,17 @@
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 
-#define DEFAULT_ENDPOINT "127.0.0.1"
 #define DEFAULT_PORT 6789
-#define CONN_TIMEOUT 10000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket af unix
+#define CONN_TIMEOUT 6000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define UNIX_PATH_MAX 108
-#define SOCKNAME "./sockfile.sock"
+#define SOCKNAME "/tmp/sockfile.sock"
 
-int socket_accept(void);
-int socket_connect(void);
+int socket_init(void);
+int socket_listen(int fd_skt);
+int socket_accept(int fd_skt);
+int socket_connect(int fd_skt);
 int socket_send(char *data);
 int socket_read(char *buf);
+void socket_close(int fd_skt);
 
 #endif //SOCKETCONN_H
