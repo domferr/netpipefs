@@ -28,17 +28,15 @@
             then;               \
         }
 
-#define PTH(e, pcall, then)         \
-        if (((e) = (pcall)) != 0) { \
-            errno = e;              \
-            then;                   \
+#define ISNEGATIVE(w, then)     \
+        if ((w) < 0) {          \
+            then;               \
         }
 
-#define PTHERR(e, pcall, then)      \
-        if (((e) = (pcall)) != 0) { \
-            errno = e;              \
-            perror(#pcall);         \
-            then;                   \
+#define ISNEGATIVEERR(w, then)  \
+        if ((w) < 0) {          \
+            perror(#w);         \
+            then;               \
         }
 
 /**

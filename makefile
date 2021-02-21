@@ -19,9 +19,13 @@ OBJS_MAIN	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o
 
-TARGETS	= $(BINDIR)/fspipe
+OBJS_PROD 	= 	$(OBJDIR)/fsprod.o
 
-.PHONY: all clean cleanall run_client run_server debug_client debug_server test checkmount umnount umount
+OBJS_CONS 	= 	$(OBJDIR)/fscons.o
+
+TARGETS	= $(BINDIR)/fspipe $(BINDIR)/fsprod $(BINDIR)/fscons
+
+.PHONY: all clean cleanall run_client run_server debug_client debug_server checkmount unmount
 
 all: $(BINDIR) $(OBJDIR) $(INCDIR) $(TARGETS)
 
@@ -46,6 +50,12 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 $(BINDIR)/fspipe: $(OBJS_MAIN)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
+$(BINDIR)/fsprod: $(OBJS_PROD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
+
+$(BINDIR)/fscons: $(OBJS_CONS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
+
 clean:
 	rm -f $(TARGETS)
 
@@ -54,36 +64,30 @@ cleanall: clean
 
 PORT 				= 12345
 ENDPOINT 			= 127.0.0.1
-CLIENT_MOUNTPOINT 	= ./tmp/client
-SERVER_MOUNTPOINT 	= ./tmp/server
+PROD_MOUNTPOINT 	= ./tmp/prod
+CONS_MOUNTPOINT 	= ./tmp/cons
 
 run_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -s $(CLIENT_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -s $(PROD_MOUNTPOINT)
 
 run_server: all
-	$(BINDIR)/fspipe --port=$(PORT) -s $(SERVER_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PORT) -s $(CONS_MOUNTPOINT)
 
+# run the client in debugging mode
 debug_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -d -s $(CLIENT_MOUNTPOINT) &
+	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -d -s $(PROD_MOUNTPOINT) &
 
+# run the server in debugging mode
 debug_server: all
-	$(BINDIR)/fspipe --port=$(PORT) -d -s $(SERVER_MOUNTPOINT) &
+	$(BINDIR)/fspipe --port=$(PORT) -d -s $(CONS_MOUNTPOINT) &
 
 checkmount:
 	mount | grep fspipe
 
-test: checkmount
-	@printf "[TEST] client writes into $(CLIENT_MOUNTPOINT)/testfile.txt "
-	@echo "Testing client write callback" > $(CLIENT_MOUNTPOINT)/testfile.txt
-	@printf " -> done\n"
-	@printf "[TEST] server reads from $(SERVER_MOUNTPOINT)/testfile.txt"
-	@cat $(SERVER_MOUNTPOINT)/testfile.txt
-	@printf " -> done\n"
-
 unmount:
-	fusermount -u ./tmp/client
-	fusermount -u ./tmp/server
+	fusermount -u $(PROD_MOUNTPOINT)
+	fusermount -u $(CONS_MOUNTPOINT)
 
 forceunmount:
-	sudo umount -l ./tmp/client
-	sudo umount -l ./tmp/server
+	sudo umount -l $(PROD_MOUNTPOINT)
+	sudo umount -l $(CONS_MOUNTPOINT)

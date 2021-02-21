@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <sys/select.h>
 
+#define DEBUGGING 1
+
 static struct sockaddr_un socket_get_address(void) {
     struct sockaddr_un sa;
     strncpy(sa.sun_path, SOCKNAME, UNIX_PATH_MAX);
@@ -15,17 +17,14 @@ static struct sockaddr_un socket_get_address(void) {
     return sa;
 }
 
-int socket_init(void) {
-    return socket(AF_UNIX, SOCK_STREAM, 0);
-}
-
-int socket_listen(int fd_skt) {
+int socket_listen(void) {
     struct sockaddr_un sa = socket_get_address();
-
+    int fd_skt;
+    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
     MINUS1(bind(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), return -1)
     MINUS1(listen(fd_skt, SOMAXCONN), return -1)
 
-    return 0;
+    return fd_skt;
 }
 
 int socket_accept(int fd_skt) {
@@ -37,7 +36,6 @@ int socket_accept(int fd_skt) {
     FD_SET(fd_skt, &set);
     //aspetto di instaurare una connessione ma se scade il timeout termino
     MINUS1(err = select(fd_skt + 1, &set, NULL, NULL, &timeout), return -1)
-    DEBUG("%s\n", "select(...)")
     if (err == 0) {
         errno = ETIMEDOUT;
         fd_client = -1;
@@ -48,28 +46,38 @@ int socket_accept(int fd_skt) {
     return fd_client;
 }
 
-int socket_connect(int fd_skt) {
+int socket_connect(void) {
+    int fd_skt;
     struct sockaddr_un sa = socket_get_address();
-
+    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
     //Avvia una connessione con il server via socket AF_UNIX
     while (connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa)) == -1 ) {
         if (errno == ENOENT) {
-            //TODO cosa fare al posto di msleep?
-            //MINUS1(msleep(1000L),return -1) /* sock ancora non esiste, aspetto CONN_INTERVAL millisecondi e poi riprovo */
-            return -1;
+            sleep(1); /* sock ancora non esiste, aspetto e poi riprovo */
         } else {
             return -1;
         }
     }
 
+    return fd_skt;
+}
+
+int socket_send(int fd_skt, const char *data, size_t size) {
+    MINUS1(writen(fd_skt, &size, sizeof(size_t)), return -1)
+    MINUS1(writen(fd_skt, (void*) data, size), return -1)
     return 0;
 }
 
-/*
-int socket_send(char *data);
-int socket_read(char *buf);*/
+int socket_read(int fd_skt, char *buf) {
+    size_t size;
+    MINUS1(readn(fd_skt, &size, sizeof(size_t)), return -1)
+    return readn(fd_skt, (void*) buf, size);
+}
 
-void socket_close(int fd_skt) {
-    close(fd_skt);
-    unlink(SOCKNAME);
+int socket_close(int fd_skt) {
+    return close(fd_skt);
+}
+
+int socket_destroy(void) {
+    return unlink(SOCKNAME);
 }

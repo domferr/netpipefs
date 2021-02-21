@@ -7,3 +7,5 @@
 	- Se il client scrive su un qualsiasi file, avviene l'invio al server che può leggere qualsiasi file
 		- VANTAGGI: non devi sapere il nome del file e questo non deve essere identico
 		- SVANTAGGI: non puoi avere più comunicazioni perchè le op su qualsiasi file consistono nella stessa operazione
+- La read_callback mi richiede di ritornare "size". Il problema è che se devo leggere 30 bytes lui comunque mi dice di
+	leggerne 4096 e non essendoci abbastanza bytes cosa devo fare?

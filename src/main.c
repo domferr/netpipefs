@@ -8,6 +8,9 @@
 #include <stddef.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
+#include "../include/scfiles.h"
+
+static size_t filesize = 0;
 
 /*
  * Command line options
@@ -51,23 +54,25 @@ static const struct fuse_opt option_spec[] = {
 // parameter coming in here, or else the fact should be documented
 // (and this might as well return void, as it did in older versions of
 // FUSE).
-static void* init_callback(struct fuse_conn_info *conn)
+/*static void* init_callback(struct fuse_conn_info *conn)
 {
     DEBUG("init() callback\n")
 
     return 0;
-}
+}*/
 
 /**
  * Clean up filesystem
  *
  * Called on filesystem exit.
  */
-static void destroy_callback(void *privatedata)
-{
+static void destroy_callback(void *privatedata) {
     DEBUG("destroy() callback\n")
     int *fd_skt = (int*) privatedata;
-    socket_close(*fd_skt);
+    if (*fd_skt != -1) {
+        socket_close(*fd_skt);
+        socket_destroy();
+    }
 }
 
 /** Get file attributes.
@@ -83,19 +88,16 @@ static void destroy_callback(void *privatedata)
  */
 static int getattr_callback(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
-
     if (strcmp(path, "/") == 0) {
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
-        return 0;
     }
 
-    stbuf->st_mode = S_IFREG | 0777;
+    stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stbuf->st_size = 0;
-    return 0;
+    stbuf->st_size = filesize;
 
-    //return -ENOENT;
+    return 0;
 }
 
 /** Open a file
@@ -147,22 +149,19 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int *fd_skt = (int*)(fuse_get_context()->private_data);
-    if (*fd_skt != -1) return 0;    //connection already established
-
-    MINUS1(*fd_skt = socket_init(), perror("socket_init()"); return errno)
 
     if (IS_SERVER) {
         int fd_client;
-        NOTZERO(socket_listen(*fd_skt), perror("socket_listen()"); return errno)
-        MINUS1(fd_client = socket_accept(*fd_skt), perror("socket_accept()"); return -errno)
+        MINUS1(fd_client = socket_accept(*fd_skt), return -errno)
         fi->fh = fd_client;
+        if ((fi->flags & O_ACCMODE) == O_RDONLY || (fi->flags & O_ACCMODE) == O_RDWR)
+            MINUS1(readn(fd_client, &filesize, sizeof(size_t)), return -errno)
         DEBUG("%s\n", "Accepted connection with client")
     } else {
-        MINUS1(socket_connect(*fd_skt), perror("socket_connect()"); return -errno)
+        MINUS1(*fd_skt = socket_connect(), return -errno)
         DEBUG("%s\n", "Connected with the server")
     }
 
-    fuse_get_context()->private_data = fd_skt;
     return 0;
 }
 
@@ -176,8 +175,12 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    //TODO if I'm the server I can read, otherwise return -EPERM
     if (IS_SERVER) {
+        int read, fd_client = fi->fh; //file descriptor for client communication
+        MINUS1(read = readn(fd_client, buf, filesize), return -errno)
+        filesize = 0;
+        //MINUS1(read = socket_read(fd_client, buf), return -errno)
+        DEBUG("Read from client %s (%d bytes)\n", buf, read)
         return size;
     }
 
@@ -194,10 +197,11 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    //writes up to size bytes from the buffer starting at buf to the file pointed by path at offset offset.
-    //TODO if I'm the client I can write, otherwise return -EPERM
     if (!IS_SERVER) {
-
+        int *fd_skt = (int*)(fuse_get_context()->private_data);
+        DEBUG("Sending %s\n", buf)
+        MINUS1(socket_send(*fd_skt, buf, size), return -errno)
+        DEBUG("Sent %ld bytes\n", size)
         return size;
     }
 
@@ -231,12 +235,22 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
+    if (IS_SERVER) {
+        MINUS1(socket_close(fi->fh), return -errno)
+        DEBUG("%s\n", "Closed connection with client")
+    } else {
+        int *fd_skt = (int*)(fuse_get_context()->private_data);
+        MINUS1(socket_close(*fd_skt), return -errno)
+        DEBUG("%s\n", "Closed connection with the server")
+        *fd_skt = -1;
+    }
+
     return 0;
 }
 
 /** Change the size of a file
  *
- * `fi` will always be NULL if the file is not currenlty open, but
+ * `fi` will always be NULL if the file is not currently open, but
  * may also be NULL if the file is open.
  *
  * Unless FUSE_CAP_HANDLE_KILLPRIV is disabled, this method is
@@ -244,12 +258,11 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
  *
  * (It is ignored but it seems to be required..)
  */
-static int truncate_callback(const char *path, off_t offset) {
+static int truncate_callback(const char *path, off_t newsize) {
     return 0;
 }
 
 static struct fuse_operations my_operations = {
-    //.init = init_callback,
     .destroy = destroy_callback,
     .getattr = getattr_callback,
     .open = open_callback,
@@ -272,14 +285,13 @@ static void show_help(const char *progname)
 
 int main(int argc, char** argv) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-    /* Set defaults -- we have to use strdup so that
-	   fuse_opt_parse can free the defaults if other
-	   values are specified */
+
+    /* Set defaults */
     options.endpoint = NULL;
     options.port = DEFAULT_PORT;
 
     /* Parse options */
-    MINUS1(fuse_opt_parse(&args, &options, option_spec, NULL), return errno)
+    MINUS1(fuse_opt_parse(&args, &options, option_spec, NULL), perror("fuse_opt_parse()"); return 1)
 
     /* When --help is specified, first print our own file-system
        specific help text, then signal fuse_main to show
@@ -288,19 +300,20 @@ int main(int argc, char** argv) {
        string) */
     if (options.show_help) {
         show_help(argv[0]);
-        MINUS1(fuse_opt_add_arg(&args, "--help"), return errno)
+        MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
         args.argv[0][0] = '\0'; //setting argv[0] to the empty string
     }
 
+    int *fd_skt;
+    EQNULLERR(fd_skt = (int*) malloc(sizeof(int)), return 1)
     if (IS_SERVER) {
+        MINUS1ERR(*fd_skt = socket_listen(), return 1)
         DEBUG("FSPipe running as server on port %d\n", options.port)
     } else {
+        *fd_skt = -1;
         DEBUG("FSPipe running as client with endpoint %s:%d\n", options.endpoint, options.port)
     }
 
-    int *fd_skt = malloc(sizeof(int));
-    EQNULL(fd_skt, perror("malloc()"); return errno)
-    *fd_skt = -1;
     int ret;
     NOTZERO(ret = fuse_main(args.argc, args.argv, &my_operations, fd_skt), perror("fuse_main()"))
 
@@ -309,6 +322,6 @@ int main(int argc, char** argv) {
     else
         DEBUG("client cleanup\n")
 
-    fuse_opt_free_args(&args);  //TODO handle program cleanup
+    fuse_opt_free_args(&args);
     return ret;
 }
