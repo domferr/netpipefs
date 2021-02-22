@@ -8,8 +8,6 @@
 #include <errno.h>
 #include <sys/select.h>
 
-#define DEBUGGING 1
-
 static struct sockaddr_un socket_get_address(void) {
     struct sockaddr_un sa;
     strncpy(sa.sun_path, SOCKNAME, UNIX_PATH_MAX);

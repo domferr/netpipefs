@@ -1,4 +1,5 @@
-#define FUSE_USE_VERSION 29
+#define FUSE_USE_VERSION 29 //fuse version 2.9. Needed by fuse.h
+
 #include <fuse.h>
 #include <string.h>
 #include <errno.h>
@@ -7,7 +8,6 @@
 #include <stddef.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
-#include "../include/scfiles.h"
 
 /*
  * Command line options
@@ -156,7 +156,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         int fd_client;
         MINUS1(fd_client = socket_accept(*fd_skt), return -errno)
         fi->fh = fd_client;
-        fi->direct_io = 1;
+        fi->direct_io = 1;  //avoid kernel caching
         DEBUG("%s\n", "Accepted connection with client");
     } else {
         MINUS1(*fd_skt = socket_connect(), return -errno)
@@ -294,11 +294,9 @@ int main(int argc, char** argv) {
     if (options.debug) {
         MINUS1ERR(fuse_opt_add_arg(&args, "-d"), return 1)
     }
-    /* When --help is specified, first print our own file-system
-       specific help text, then signal fuse_main to show
-       additional help (by adding `--help` to the options again)
-       without usage: line (by setting argv[0] to the empty
-       string) */
+    /* When --help is specified, first print file-system specific help text,
+       then signal fuse_main to show additional help (by adding `--help` to the options again)
+       without usage: line (by setting argv[0] to the empty string) */
     if (options.show_help) {
         show_help(argv[0]);
         MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
@@ -324,5 +322,6 @@ int main(int argc, char** argv) {
         DEBUG("%s\n", "Client cleanup");
 
     fuse_opt_free_args(&args);
+    free(fd_skt);
     return ret;
 }
