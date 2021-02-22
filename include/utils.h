@@ -49,16 +49,4 @@
  */
 #define MS_TO_USEC(ms) (((ms) % 1000L) * 1000L)
 
-//https://gcc.gnu.org/onlinedocs/cpp/Variadic-Macros.html
-#ifdef DEBUGGING
-#if DEBUGGING
-#define DEBUG(...) \
-    do { printf(__VA_ARGS__); } while(0);
-#else
-#define DEBUG(str, ...)
-#endif
-#else
-#define DEBUG(str, ...)
-#endif
-
 #endif //UTILS_H

@@ -12,18 +12,21 @@ int main(int argc, char** argv) {
 
     //Write into it
     int prec1 = 0, prec2 = 1, next = 1, counter = 2;
-    ISNEGATIVEERR(fprintf(fp, "%d\n", prec1), return 1)
-    ISNEGATIVEERR(fprintf(fp, "%d\n", prec2), return 1)
+    printf("Sending: %d %d ", prec1, prec2);
+    ISNEGATIVEERR(fprintf(fp, "%d ", prec1), return 1)
+    ISNEGATIVEERR(fprintf(fp, "%d ", prec2), return 1)
 
     while (counter < MAXNUMBERS) {
-        ISNEGATIVEERR(fprintf(fp, "%d\n", next), return 1)
+        ISNEGATIVEERR(fprintf(fp, "%d ", next), return 1)
+        printf("%d ", next);
 
         prec1 = prec2;
         prec2 = next;
         next = prec1 + prec2;
         counter++;
     }
-    ISNEGATIVEERR(fprintf(fp, "%d\n", -1), return 1)
+    ISNEGATIVEERR(fprintf(fp, "%d ", -1), return 1)
+    printf("-1\n");
 
     //END
     fclose(fp);

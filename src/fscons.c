@@ -12,14 +12,14 @@ int main(int argc, char** argv) {
 
     //Read from it
     int number, err;
-    while ((err = fscanf(fp, "%d\n", &number)) > 0 && number != -1) {
+    while ((err = fscanf(fp, "%d ", &number)) > 0 && number != -1) {
         printf("%d ", number);
     }
     if (err < 0) {
         perror("fscanf");
         return 1;
     }
-
+    printf("\n");
     //END
     fclose(fp);
 
