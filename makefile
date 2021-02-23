@@ -19,9 +19,11 @@ OBJS_MAIN	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o
 
-OBJS_PROD 	= 	$(OBJDIR)/fsprod.o
+OBJS_PROD 	= 	$(OBJDIR)/fsprod.o		\
+				$(OBJDIR)/scfiles.o
 
-OBJS_CONS 	= 	$(OBJDIR)/fscons.o
+OBJS_CONS 	= 	$(OBJDIR)/fscons.o		\
+				$(OBJDIR)/scfiles.o
 
 TARGETS	= $(BINDIR)/fspipe $(BINDIR)/fsprod $(BINDIR)/fscons
 
@@ -75,11 +77,11 @@ run_server: all
 
 # run the client in debugging mode
 debug_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -d -s $(PROD_MOUNTPOINT) &
+	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -d -s $(PROD_MOUNTPOINT)
 
 # run the server in debugging mode
 debug_server: all
-	$(BINDIR)/fspipe --port=$(PORT) -d -s $(CONS_MOUNTPOINT) &
+	$(BINDIR)/fspipe --port=$(PORT) -d -s $(CONS_MOUNTPOINT)
 
 checkmount:
 	mount | grep fspipe

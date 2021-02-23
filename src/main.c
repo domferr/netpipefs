@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
+#include "../include/scfiles.h"
 
 /*
  * Command line options
@@ -177,13 +178,14 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     if (IS_SERVER) {
-        int read, fd_client = fi->fh; //file descriptor for client communication
-        MINUS1(read = socket_read(fd_client, buf), return -errno)
-        DEBUG("Read from client %s (%d bytes)\n", buf, read);
-        return size;
+        int fd_client = fi->fh; //file descriptor for client communication
+        ssize_t read;
+        MINUS1(read = readn(fd_client, buf, size), return -errno)
+        DEBUG("Read from client %ld bytes\n", read);
+        return read;
     }
 
-    return -EPERM;
+    return -ENOENT;
 }
 
 /** Write data to an open file
@@ -198,12 +200,13 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     if (!IS_SERVER) {
         int *fd_skt = (int*)(fuse_get_context()->private_data);
-        MINUS1(socket_send(*fd_skt, buf, size), return -errno)
-        DEBUG("Sent %ld bytes\n", size);
-        return size;
+        ssize_t wrote;
+        MINUS1(wrote = writen(*fd_skt, (void*) buf, size), return -errno)
+        DEBUG("Sent %ld bytes\n", wrote);
+        return wrote;   //TODO what to do if wrote != size?
     }
 
-    return -EPERM;
+    return -ENOENT;
 }
 
 /**
@@ -289,7 +292,7 @@ int main(int argc, char** argv) {
     options.port = DEFAULT_PORT;
 
     /* Parse options */
-    MINUS1(fuse_opt_parse(&args, &options, option_spec, NULL), perror("fuse_opt_parse()"); return 1)
+    MINUS1ERR(fuse_opt_parse(&args, &options, option_spec, NULL), return 1)
 
     if (options.debug) {
         MINUS1ERR(fuse_opt_add_arg(&args, "-d"), return 1)

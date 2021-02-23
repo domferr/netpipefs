@@ -44,7 +44,7 @@ int socket_connect(void);
  *
  * @return 0 in caso di successo, -1 altrimenti ed imposta errno
  */
-int socket_send(int fd_skt, const char *data, size_t size);
+//int socket_send(int fd_skt, const char *data, size_t size);
 
 /**
  *
@@ -53,7 +53,7 @@ int socket_send(int fd_skt, const char *data, size_t size);
  *
  * @return quanti bytes sono stati letti. In caso di errore ritorna -1 ed imposta errno
  */
-int socket_read(int fd_skt, char *buf);
+//int socket_read(int fd_skt, char *buf);
 
 /**
  * Chiude il socket fornito.

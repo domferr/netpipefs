@@ -1,27 +1,28 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "../include/utils.h"
+#include "../include/scfiles.h"
 
 #define FILEPATH "./tmp/cons/mypipe"
 
 int main(int argc, char** argv) {
     //Open file
-    FILE *fp;
-    EQNULLERR(fp = fopen(FILEPATH, "r"), return 1)
+    int fd = open(FILEPATH, O_RDONLY);
+    MINUS1(fd, perror("open()"); return 1)
 
     //Read from it
     int number, err;
-    while ((err = fscanf(fp, "%d ", &number)) > 0 && number != -1) {
+    while ((err = readn(fd, &number, sizeof(int))) > 0 && number != -1) {
         printf("%d ", number);
     }
-    if (err < 0) {
-        perror("fscanf");
-        return 1;
-    }
+    ISNEGATIVE(err, perror("readn"); return 1)
     printf("\n");
+    
     //END
-    fclose(fp);
+    MINUS1ERR(close(fd), return 1)
 
     return 0;
 }

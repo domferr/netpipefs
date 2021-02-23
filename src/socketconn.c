@@ -60,7 +60,7 @@ int socket_connect(void) {
     return fd_skt;
 }
 
-int socket_send(int fd_skt, const char *data, size_t size) {
+/*int socket_send(int fd_skt, const char *data, size_t size) {
     MINUS1(writen(fd_skt, &size, sizeof(size_t)), return -1)
     MINUS1(writen(fd_skt, (void*) data, size), return -1)
     return 0;
@@ -70,7 +70,7 @@ int socket_read(int fd_skt, char *buf) {
     size_t size;
     MINUS1(readn(fd_skt, &size, sizeof(size_t)), return -1)
     return readn(fd_skt, (void*) buf, size);
-}
+}*/
 
 int socket_close(int fd_skt) {
     return close(fd_skt);
