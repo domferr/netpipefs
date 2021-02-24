@@ -18,9 +18,13 @@ int main(int argc, char** argv) {
     while ((err = readn(fd, &number, sizeof(int))) > 0 && number != -1) {
         printf("%d ", number);
     }
+    if (err < 0) {
+        perror("readn");
+        return 1;
+    }
     ISNEGATIVE(err, perror("readn"); return 1)
     printf("\n");
-    
+
     //END
     MINUS1ERR(close(fd), return 1)
 

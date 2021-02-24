@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #define DEFAULT_PORT 6789
-#define CONN_TIMEOUT 6000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
+#define DEFAULT_TIMEOUT 8000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define UNIX_PATH_MAX 108
 #define SOCKNAME "/tmp/sockfile.sock"
 
@@ -20,19 +20,22 @@ int socket_listen(void);
  * la connessione. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
  *
  * @param fd_skt file descriptor sul quale accettare la connessione
- *
+ * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
+ * tempo di default DEFAULT_TIMEOUT
  * @return file descriptor del client con il quale è iniziata la connessione, -1 in caso di errore e imposta errno
  */
-int socket_accept(int fd_skt);
+int socket_accept(int fd_skt, long timeout);
 
 /**
  * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di 1 secondo.
  * Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
- * ed imposta errno.
+ * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
  *
+ * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
+ * tempo di default DEFAULT_TIMEOUT
  * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
  */
-int socket_connect(void);
+int socket_connect(long timeout);
 
 /**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
@@ -56,18 +59,9 @@ int socket_connect(void);
 //int socket_read(int fd_skt, char *buf);
 
 /**
- * Chiude il socket fornito.
+ * Unlink the file used for the socket communication
  *
- * @param fd_skt socket da chiudere
- *
- * @return 0 in caso di successo, -1 altrimenti ed imposta errno
- */
-int socket_close(int fd_skt);
-
-/**
- * Cancella il file utilizzato per comunicazione via sockets
- *
- * @return 0 in caso di successo, -1 altrimenti ed imposta errno
+ * @return 0 on success, -1 otherwise and errno is set
  */
 int socket_destroy(void);
 

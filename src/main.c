@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <unistd.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/scfiles.h"
@@ -24,6 +25,7 @@ static struct options {
     int port;
     int show_help;
     int debug;
+    long timeout;
 } options;
 
 #define OPTION(t, p)                           \
@@ -31,6 +33,7 @@ static struct options {
 static const struct fuse_opt option_spec[] = {
         OPTION("--endpoint=%s", endpoint),
         OPTION("--port=%d", port),
+        OPTION("--timeout=%d", timeout),
         OPTION("-h", show_help),
         OPTION("--help", show_help),
         OPTION("-d", debug),
@@ -74,7 +77,7 @@ static void destroy_callback(void *privatedata) {
     DEBUG("%s\n", "destroy() callback");
     int *fd_skt = (int*) privatedata;
     if (*fd_skt != -1) {
-        socket_close(*fd_skt);
+        close(*fd_skt);
         socket_destroy();
     }
 }
@@ -155,12 +158,12 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
 
     if (IS_SERVER) {
         int fd_client;
-        MINUS1(fd_client = socket_accept(*fd_skt), return -errno)
+        MINUS1(fd_client = socket_accept(*fd_skt, options.timeout), return -ENOENT)
         fi->fh = fd_client;
         fi->direct_io = 1;  //avoid kernel caching
         DEBUG("%s\n", "Accepted connection with client");
     } else {
-        MINUS1(*fd_skt = socket_connect(), return -errno)
+        MINUS1(*fd_skt = socket_connect(options.timeout), return -ENOENT)
         DEBUG("%s\n", "Connected with the server");
     }
 
@@ -237,11 +240,11 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
     if (IS_SERVER) {
-        MINUS1(socket_close(fi->fh), return -errno)
+        MINUS1(close(fi->fh), return -errno)
         DEBUG("%s\n", "Closed connection with client");
     } else {
         int *fd_skt = (int*)(fuse_get_context()->private_data);
-        MINUS1(socket_close(*fd_skt), return -errno)
+        MINUS1(close(*fd_skt), return -errno)
         DEBUG("%s\n", "Closed connection with the server");
         *fd_skt = -1;
     }
@@ -290,6 +293,7 @@ int main(int argc, char** argv) {
     /* Set defaults */
     options.endpoint = NULL;
     options.port = DEFAULT_PORT;
+    options.timeout = DEFAULT_TIMEOUT;
 
     /* Parse options */
     MINUS1ERR(fuse_opt_parse(&args, &options, option_spec, NULL), return 1)
@@ -316,8 +320,7 @@ int main(int argc, char** argv) {
         DEBUG("FSPipe running as client with endpoint %s:%d\n", options.endpoint, options.port);
     }
 
-    int ret;
-    NOTZERO(ret = fuse_main(args.argc, args.argv, &my_operations, fd_skt), perror("fuse_main()"))
+    int ret = fuse_main(args.argc, args.argv, &my_operations, fd_skt);
 
     if (IS_SERVER)
         DEBUG("%s\n", "Server cleanup");

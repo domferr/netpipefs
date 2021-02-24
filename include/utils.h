@@ -49,4 +49,17 @@
  */
 #define MS_TO_USEC(ms) (((ms) % 1000L) * 1000L)
 
+/**
+ * Quanti nanosecondi ci sono nei millisecondi specificati
+ */
+#define MS_TO_NANOSEC(ms) (((ms)%1000L)*1000000L)
+
+/**
+ * Mette il thread in attesa per un tempo pari ai millisecondi specificati.
+ *
+ * @param milliseconds quanti millisecondi attendere
+ * @return 0 in caso di successo, -1 altrimenti
+ */
+int msleep(int milliseconds);
+
 #endif //UTILS_H
