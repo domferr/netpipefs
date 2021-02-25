@@ -6,23 +6,20 @@
 #include "../include/utils.h"
 #include "../include/scfiles.h"
 
-#define FILEPATH "./tmp/cons/mypipe"
+#define FILEPATH "./tmp/cons/mypipe.txt"
+#define MAXNUMBERS 10
 
 int main(int argc, char** argv) {
     //Open file
-    int fd = open(FILEPATH, O_RDONLY);
-    MINUS1(fd, perror("open()"); return 1)
+    int fd;
+    MINUS1ERR(fd = open(FILEPATH, O_RDONLY), return 1)
 
     //Read from it
-    int number, err;
-    while ((err = readn(fd, &number, sizeof(int))) > 0 && number != -1) {
-        printf("%d ", number);
+    int numbers[MAXNUMBERS];
+    ISNEGATIVE(readn(fd, &numbers, sizeof(int)*MAXNUMBERS), return 1)
+    for (int i = 0; i < MAXNUMBERS; ++i) {
+        printf("%d ", numbers[i]);
     }
-    if (err < 0) {
-        perror("readn");
-        return 1;
-    }
-    ISNEGATIVE(err, perror("readn"); return 1)
     printf("\n");
 
     //END

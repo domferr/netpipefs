@@ -5,7 +5,7 @@
 #include "../include/utils.h"
 #include "../include/scfiles.h"
 
-#define FILEPATH "./tmp/prod/mypipe"
+#define FILEPATH "./tmp/prod/mypipe.txt"
 #define MAXNUMBERS 10
 
 int main(int argc, char** argv) {
