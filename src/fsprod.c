@@ -14,7 +14,8 @@ int main(int argc, char** argv) {
     MINUS1(fd, perror("open()"); return 1)
 
     //Write into it the first MAXNUMBERS
-    int prec1 = 0, prec2 = 1, next = 1, counter = 2;
+    int prec1 = 0, prec2 = 1, next = 1, counter = 2, maxnumbers = MAXNUMBERS;
+    ISNEGATIVEERR(writen(fd, &maxnumbers, sizeof(int)), return 1)
     printf("Sending: %d %d ", prec1, prec2);
     ISNEGATIVEERR(writen(fd, &prec1, sizeof(int)), return 1)
     ISNEGATIVEERR(writen(fd, &prec2, sizeof(int)), return 1)

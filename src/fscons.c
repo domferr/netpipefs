@@ -7,17 +7,18 @@
 #include "../include/scfiles.h"
 
 #define FILEPATH "./tmp/cons/mypipe.txt"
-#define MAXNUMBERS 10
 
 int main(int argc, char** argv) {
     //Open file
-    int fd;
+    int fd, maxnumbers;
     MINUS1ERR(fd = open(FILEPATH, O_RDONLY), return 1)
 
     //Read from it
-    int numbers[MAXNUMBERS];
-    ISNEGATIVE(readn(fd, &numbers, sizeof(int)*MAXNUMBERS), return 1)
-    for (int i = 0; i < MAXNUMBERS; ++i) {
+    ISNEGATIVE(readn(fd, &maxnumbers, sizeof(int)), return 1)
+    int *numbers = (int*) malloc(sizeof(int)*maxnumbers);
+    EQNULL(numbers, perror("malloc"); return 1);
+    ISNEGATIVE(readn(fd, numbers, sizeof(int)*maxnumbers), return 1)
+    for (int i = 0; i < maxnumbers; ++i) {
         printf("%d ", numbers[i]);
     }
     printf("\n");
