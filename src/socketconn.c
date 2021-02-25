@@ -47,43 +47,58 @@ int socket_accept(int fd_skt, long timeout) {
     return fd_client;
 }
 
-static int set_socket_blocking_mode(int fd, int blocking) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) return -1;
-    flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
-    return fcntl(fd, F_SETFL, flags);
-}
-
 int socket_connect(long timeout) {
-    int fd_skt, so_error;
-    socklen_t len = sizeof(so_error);
+    int fd_skt, flags, res;
     struct sockaddr_un sa = socket_get_address();
-    fd_set set;
     struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
 
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
 
-    //Set the socket to non blocking mode
-    MINUS1(set_socket_blocking_mode(fd_skt, 0), return -1)
-    MINUS1(connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), return -1)
+    // get socket flags
+    ISNEGATIVE(flags = fcntl(fd_skt, F_GETFL, NULL), return -1)
 
-    FD_ZERO(&set);
-    FD_SET(fd_skt, &set);
-    //Aspetto di instaurare una connessione ma se scade il timeout termino
-    MINUS1(select(fd_skt + 1, &set, NULL, NULL, &time_to_wait), return -1)
+    // set socket non-blocking
+    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), return -1);
 
-    MINUS1(getsockopt(fd_skt, SOL_SOCKET, SO_ERROR, &so_error, &len), close(fd_skt); return -1)
-    if (so_error == 0) {
-        //Set the socket back to blocking mode
-        MINUS1(set_socket_blocking_mode(fd_skt, 1), close(fd_skt); return -1)
-        return fd_skt;
-    } else if (time_to_wait.tv_usec == 0 && time_to_wait.tv_sec == 0) {
-        errno = ETIMEDOUT;
-        fprintf(stderr, "timeout\n");
+    // try to connect
+    if ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
+        if (errno == EINPROGRESS) {
+            fd_set wait_set;
+
+            // make file descriptor set with socket
+            FD_ZERO (&wait_set);
+            FD_SET(fd_skt, &wait_set);
+
+            // wait for socket to be writable; return after given timeout
+            res = select(fd_skt + 1, NULL, &wait_set, NULL, &time_to_wait);
+        }
+    } else {    // connection was successful immediately
+        res = 1;
     }
 
-    close(fd_skt);
-    return -1;
+    // reset socket flags
+    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags), return -1)
+
+    if (res < 0) {  // an error occurred in connect or select
+        return -1;
+    } else if (res == 0) {    // select timed out
+        errno = ETIMEDOUT;
+        fprintf(stderr, "timeout\n");
+        return -1;
+    } else {
+        socklen_t len = sizeof(flags);
+
+        // check for errors in socket layer
+        ISNEGATIVE(getsockopt(fd_skt, SOL_SOCKET, SO_ERROR, &flags, &len), return -1)
+
+        // there was an error
+        if (flags) {
+            errno = flags;
+            return -1;
+        }
+    }
+
+    return fd_skt;
 }
 
 int socket_destroy(void) {

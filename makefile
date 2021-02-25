@@ -77,11 +77,11 @@ run_server: all
 
 # run the client in debugging mode
 debug_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) --timeout=4000 -d -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) --timeout=2000 -d -s $(PROD_MOUNTPOINT)
 
 # run the server in debugging mode
 debug_server: all
-	$(BINDIR)/fspipe --port=$(PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PORT) --timeout=6000 -d -s $(CONS_MOUNTPOINT)
 
 checkmount:
 	mount | grep fspipe

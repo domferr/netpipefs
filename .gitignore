@@ -2,4 +2,3 @@ cmake-build-debug
 bin
 obj
 tmp
-ubuntu_setup_env.sh
