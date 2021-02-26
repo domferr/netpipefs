@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include "../include/utils.h"
 #include "../include/scfiles.h"
 
@@ -16,7 +17,7 @@ int main(int argc, char** argv) {
     //Write into it the first MAXNUMBERS
     int prec1 = 0, prec2 = 1, next = 1, counter = 2, maxnumbers = MAXNUMBERS;
     ISNEGATIVEERR(writen(fd, &maxnumbers, sizeof(int)), return 1)
-    printf("Sending: %d %d ", prec1, prec2);
+    printf("Writing %d %d ", prec1, prec2);
     ISNEGATIVEERR(writen(fd, &prec1, sizeof(int)), return 1)
     ISNEGATIVEERR(writen(fd, &prec2, sizeof(int)), return 1)
 
@@ -31,7 +32,7 @@ int main(int argc, char** argv) {
     }
     next = -1;
     ISNEGATIVEERR(writen(fd, &next, sizeof(int)), return 1)
-    printf("-1\n");
+    printf("-1 into %s\n", FILEPATH);
 
     //END
     MINUS1ERR(close(fd), return 1)

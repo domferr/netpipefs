@@ -1,0 +1,3 @@
+Se utilizzassi lo stesso socket per comunicare, non so se ogni volta leggo quello che riguarda il file che ho richiesto
+oppure un altro. Invece, non posso usare più di un socket perchè avrei bisogno di una porta differente e quindi l'altro
+non saprebbe sempre a quale porta inviare i dati oltre al fatto che potrei aprire troppi sockets.
