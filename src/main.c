@@ -157,23 +157,27 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int *fd_skt = (int*)(fuse_get_context()->private_data), confirm;
     size_t size;
-
+    //TODO gestire caso in cui da un lato viene terminata la connessione
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
         if (*fd_skt == -1)
             MINUS1ERR(*fd_skt = socket_listen(), return -ENOENT)
         int fd_client;
         MINUS1(fd_client = socket_accept(*fd_skt, fspipe.timeout), return -ENOENT)
 
-        // read the path requested by the client
-        MINUS1(socket_read(fd_client, &size, sizeof(size_t), fspipe.timeout), return -ENOENT)
+        // read what path is requested
+        if (readn(fd_client, &size, sizeof(size_t)) <= 0) return -ENOENT;
         char *other_path = (char*) malloc(sizeof(char)*size);
         EQNULL(other_path, close(fd_client); return -ENOENT)
-        MINUS1(socket_read(fd_client, other_path, sizeof(char)*size, fspipe.timeout), free(other_path); return -ENOENT)
+        if (readn(fd_client, other_path, sizeof(char)*size) <= 0) {
+            free(other_path);
+            return -ENOENT;
+        }
 
         // compare its path with mine and send confirmation
         confirm = strcmp(path, other_path) == 0 ? 1:0;
         free(other_path);
-        MINUS1(writen(fd_client, &confirm, sizeof(int)), return -ENOENT)
+        if (writen(fd_client, &confirm, sizeof(int)) <= 0) return -ENOENT;
+
         if (!confirm) {
             close(fd_client);
             return -ENOENT;
@@ -187,12 +191,12 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
 
         // send the path requested by the client
         size = strlen(path);
-        MINUS1(writen(*fd_skt, &size, sizeof(size_t)), return -ENOENT)
-        MINUS1(writen(*fd_skt, (void*) path, sizeof(char)*size), return -ENOENT)
-        return -ENOENT; //TODO remove this!!!
+        if (writen(*fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (writen(*fd_skt, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
 
         // read the confirmation
-        MINUS1(socket_read(*fd_skt, &confirm, sizeof(int), fspipe.timeout), return -ENOENT)
+        if (readn(*fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
+
         if (!confirm) {
             close(*fd_skt);
             return -ENOENT;
@@ -219,9 +223,15 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     int fd_client = fi->fh; //file descriptor for client communication
-    ssize_t read;
-    MINUS1(read = readn(fd_client, buf, size), return -errno)
-    return read;
+    ssize_t read = readn(fd_client, buf, size);
+    if (read == -1) {
+        if (errno == EPIPE) {
+            DEBUG("connection closed on the other side\n");
+            return 0;
+        }
+        return -errno;
+    }
+    return read; // return >= 0
 }
 
 /** Write data to an open file
@@ -235,8 +245,15 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     int *fd_skt = (int*)(fuse_get_context()->private_data);
-    ssize_t wrote;
-    MINUS1(wrote = writen(*fd_skt, (void*) buf, size), return -errno)
+    ssize_t wrote = writen(*fd_skt, (void*) buf, size);
+    if (wrote == -1) {
+        if (errno == EPIPE) {
+            DEBUG("connection closed on the other side\n");
+            return 0;
+        }
+        return -errno;
+    }
+
     return wrote;
 }
 
