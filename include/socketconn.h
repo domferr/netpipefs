@@ -1,9 +1,7 @@
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 
-#include <stddef.h>
-
-#define DEFAULT_PORT 6789
+#define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define UNIX_PATH_MAX 108
 #define SOCKNAME "/tmp/sockfile.sock"

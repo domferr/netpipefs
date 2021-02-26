@@ -15,7 +15,7 @@ INCLUDES 	= -I $(INCDIR)
 LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR)	# richiesto da FUSE
 
 # dipendenze per l'eseguibile
-OBJS_MAIN	=	$(OBJDIR)/main.o		\
+OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o
 
@@ -27,7 +27,7 @@ OBJS_CONS 	= 	$(OBJDIR)/fscons.o		\
 
 TARGETS	= $(BINDIR)/fspipe $(BINDIR)/fsprod $(BINDIR)/fscons
 
-.PHONY: all clean cleanall run_client run_server debug_client debug_server checkmount unmount
+.PHONY: all clean cleanall mount_prod mount_cons debug_prod debug_cons usage checkmount unmount
 
 all: $(BINDIR) $(OBJDIR) $(INCDIR) $(TARGETS)
 
@@ -49,7 +49,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 # da .c ad eseguibile fspipe
-$(BINDIR)/fspipe: $(OBJS_MAIN)
+$(BINDIR)/fspipe: $(OBJS_FSPIPE)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
 $(BINDIR)/fsprod: $(OBJS_PROD)
@@ -64,24 +64,28 @@ clean:
 cleanall: clean
 	\rm -f $(OBJDIR)/*.o *~ *.a *.sock
 
-PORT 				= 12345
-ENDPOINT 			= 127.0.0.1
+PROD_PORT 			= 12345
+CONS_PORT 			= 6789
+PROD_HOST 			= 127.0.0.1
+CONS_HOST 			= 127.0.0.1
 PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 
-run_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) -s $(PROD_MOUNTPOINT)
+mount_prod: all
+	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
 
-run_server: all
-	$(BINDIR)/fspipe --port=$(PORT) -s $(CONS_MOUNTPOINT)
+mount_cons: all
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
 
-# run the client in debugging mode
-debug_client: all
-	$(BINDIR)/fspipe --port=$(PORT) --endpoint=$(ENDPOINT) --timeout=2000 -d -s $(PROD_MOUNTPOINT)
+debug_prod: all
+	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -o debug -s $(PROD_MOUNTPOINT)
 
-# run the server in debugging mode
-debug_server: all
-	$(BINDIR)/fspipe --port=$(PORT) --timeout=6000 -d -s $(CONS_MOUNTPOINT)
+debug_cons: all
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+
+# run with help flag
+usage: all
+	$(BINDIR)/fspipe -h
 
 checkmount:
 	mount | grep fspipe
