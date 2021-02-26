@@ -1,6 +1,8 @@
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 
+#include <stddef.h>
+
 #define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define UNIX_PATH_MAX 108
@@ -51,10 +53,11 @@ int socket_connect(long timeout);
  *
  * @param fd_skt file descriptor sul quale leggere i dati
  * @param buf buffer sul quale scrivere i dati lettere
- *
- * @return quanti bytes sono stati letti. In caso di errore ritorna -1 ed imposta errno
+ * @param timeout tempo massimo per la lettura
+ * @return quanti bytes sono stati letti. In caso di errore ritorna -1 ed imposta errno. Se scade il tempo, ritorna -1
+ * ed imposta errno a ETIMEDOUT.
  */
-//int socket_read(int fd_skt, char *buf);
+int socket_read(int fd, void *buf, size_t size, long timeout);
 
 /**
  * Unlink the file used for the socket communication

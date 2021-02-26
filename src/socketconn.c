@@ -50,6 +50,7 @@ int socket_accept(int fd_skt, long timeout) {
 int socket_connect(long timeout) {
     int fd_skt, flags, res;
     struct sockaddr_un sa = socket_get_address();
+    ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
     struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
 
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
@@ -99,6 +100,22 @@ int socket_connect(long timeout) {
     }
 
     return fd_skt;
+}
+
+int socket_read(int fd, void *buf, size_t size, long timeout) {
+    int err;
+    ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
+    struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
+    fd_set rd_set;
+
+    FD_ZERO(&rd_set);
+    FD_SET(fd, &rd_set);
+    MINUS1(err = select(fd + 1, &rd_set, NULL, NULL, &time_to_wait), return -1);
+    if (err == 0) {
+        errno = ETIMEDOUT;
+        return -1;
+    }
+    return readn(fd, buf, size);
 }
 
 int socket_destroy(void) {

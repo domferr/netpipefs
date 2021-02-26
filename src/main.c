@@ -157,7 +157,6 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int *fd_skt = (int*)(fuse_get_context()->private_data), confirm;
     size_t size;
-    //TODO read/write with timeouts
 
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
         if (*fd_skt == -1)
@@ -166,10 +165,10 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         MINUS1(fd_client = socket_accept(*fd_skt, fspipe.timeout), return -ENOENT)
 
         // read the path requested by the client
-        MINUS1(readn(fd_client, &size, sizeof(size_t)), return -ENOENT)
+        MINUS1(socket_read(fd_client, &size, sizeof(size_t), fspipe.timeout), return -ENOENT)
         char *other_path = (char*) malloc(sizeof(char)*size);
         EQNULL(other_path, close(fd_client); return -ENOENT)
-        MINUS1(readn(fd_client, other_path, sizeof(char)*size), free(other_path); return -ENOENT)
+        MINUS1(socket_read(fd_client, other_path, sizeof(char)*size, fspipe.timeout), free(other_path); return -ENOENT)
 
         // compare its path with mine and send confirmation
         confirm = strcmp(path, other_path) == 0 ? 1:0;
@@ -181,7 +180,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         }
 
         fi->fh = fd_client;
-        fi->direct_io = 1;  // avoid kernel caching
+        fi->direct_io = 1;   // avoid kernel caching
         fi->nonseekable = 1; // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
     } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
         MINUS1(*fd_skt = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
@@ -190,9 +189,10 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         size = strlen(path);
         MINUS1(writen(*fd_skt, &size, sizeof(size_t)), return -ENOENT)
         MINUS1(writen(*fd_skt, (void*) path, sizeof(char)*size), return -ENOENT)
+        return -ENOENT; //TODO remove this!!!
 
         // read the confirmation
-        MINUS1(readn(*fd_skt, &confirm, sizeof(int)), return -ENOENT)
+        MINUS1(socket_read(*fd_skt, &confirm, sizeof(int), fspipe.timeout), return -ENOENT)
         if (!confirm) {
             close(*fd_skt);
             return -ENOENT;
