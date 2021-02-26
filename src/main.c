@@ -47,8 +47,6 @@ static const struct fuse_opt fspipe_opts[] = {
 #define DEBUG(...)						\
 	do { if (fspipe.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
 
-#define IS_SERVER (fspipe.host == NULL)
-
 /**
  * Initialize filesystem
  *
@@ -161,7 +159,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     size_t size;
     //TODO read/write with timeouts
 
-    if (IS_SERVER) {
+    if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
         if (*fd_skt == -1)
             MINUS1ERR(*fd_skt = socket_listen(), return -ENOENT)
         int fd_client;
@@ -182,12 +180,10 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
             return -ENOENT;
         }
 
-        DEBUG("%s\n", "accepted connection with client");
-
         fi->fh = fd_client;
         fi->direct_io = 1;  // avoid kernel caching
-        //fi->nonseekable = 1; //TODO should the file be seekeable or not?
-    } else {
+        fi->nonseekable = 1; // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
+    } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
         MINUS1(*fd_skt = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
 
         // send the path requested by the client
@@ -201,10 +197,14 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
             close(*fd_skt);
             return -ENOENT;
         }
-
-        DEBUG("%s\n", "connected with the server");
+    } else if ((fi->flags & O_ACCMODE) == O_RDWR) {     // open the file for both reading and writing
+        DEBUG("read and write access\n");
+        return -EINVAL;
+    } else {
+        return -EINVAL;
     }
 
+    DEBUG("established connection for %s\n", path);
     return 0;
 }
 
@@ -218,15 +218,10 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    if (IS_SERVER) {
-        int fd_client = fi->fh; //file descriptor for client communication
-        ssize_t read;
-        MINUS1(read = readn(fd_client, buf, size), return -errno)
-        DEBUG("read from client %ld bytes\n", read);
-        return read;
-    }
-
-    return -ENOENT;
+    int fd_client = fi->fh; //file descriptor for client communication
+    ssize_t read;
+    MINUS1(read = readn(fd_client, buf, size), return -errno)
+    return read;
 }
 
 /** Write data to an open file
@@ -239,15 +234,10 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    if (!IS_SERVER) {
-        int *fd_skt = (int*)(fuse_get_context()->private_data);
-        ssize_t wrote;
-        MINUS1(wrote = writen(*fd_skt, (void*) buf, size), return -errno)
-        DEBUG("sent %ld bytes\n", wrote);
-        return wrote;
-    }
-
-    return -ENOENT;
+    int *fd_skt = (int*)(fuse_get_context()->private_data);
+    ssize_t wrote;
+    MINUS1(wrote = writen(*fd_skt, (void*) buf, size), return -errno)
+    return wrote;
 }
 
 /**
@@ -277,16 +267,15 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
-    if (IS_SERVER) {
+    if ((fi->flags & O_ACCMODE) == O_RDONLY) {
         MINUS1(close(fi->fh), return -errno)
-        DEBUG("%s\n", "closed connection with client");
     } else {
         int *fd_skt = (int*)(fuse_get_context()->private_data);
         MINUS1(close(*fd_skt), return -errno)
-        DEBUG("%s\n", "closed connection with the server");
         *fd_skt = -1;
     }
 
+    DEBUG("closed connection for %s\n", path);
     return 0;
 }
 
@@ -346,7 +335,7 @@ int main(int argc, char** argv) {
     if (fspipe.show_help) {
         show_help(argv[0]);
         MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
-        args.argv[0][0] = '\0'; //setting argv[0] to the empty string
+        args.argv[0][0] = '\0'; //setting argv[0] to the empty string   //TODO this is not working. The usage line is still printed by fuse, why?
     } else if (fspipe.host == NULL) {
         fprintf(stderr, "missing host\nsee '%s -h' for usage\n", argv[0]);
         return 1;
