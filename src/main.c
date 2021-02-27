@@ -344,15 +344,7 @@ static const struct fuse_operations fspipe_oper = {
     .readdir = readdir_callback
 };
 
-static void show_help(const char *progname)
-{
-    printf("usage: %s [options] <mountpoint>\n\n", progname);
-    printf("File-system specific options:\n"
-           "    --host=<s>              When given it will act as a client, otherwise as a server\n"
-           "    --port=<d>              The port used for the socket connection\n"
-           "                            (default: %d)\n"
-           "\n", DEFAULT_PORT);
-}
+static void show_help(const char *progname);
 
 int main(int argc, char** argv) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -374,8 +366,10 @@ int main(int argc, char** argv) {
        without usage: line (by setting argv[0] to the empty string) */
     if (fspipe.show_help) {
         show_help(argv[0]);
-        MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
-        args.argv[0][0] = '\0'; //setting argv[0] to the empty string   //TODO this is not working. The usage line is still printed by fuse, why?
+        //MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
+        //TODO this is not working. The usage line is still printed by fuse
+        //args.argv[0][0] = '\0'; //setting argv[0] to the empty string
+        return 0;
     } else if (fspipe.host == NULL) {
         fprintf(stderr, "missing host\nsee '%s -h' for usage\n", argv[0]);
         return 1;
@@ -395,4 +389,77 @@ int main(int argc, char** argv) {
     fuse_opt_free_args(&args);
     free(fd_skt);
     return ret;
+}
+
+static void show_help(const char *progname) {
+    printf("usage: %s [options] <mountpoint>\n\n", progname);
+    printf("fspipe options:\n"
+           "    --host=<s>              When given it will act as a client, otherwise as a server\n"
+           "    --port=<d>              The port used for the socket connection\n"
+           "                            (default: %d)\n"
+           "\n", DEFAULT_PORT);
+    printf("general options:\n"
+           "    -o opt,[opt...]        mount options\n"
+           "    -h   --help            print help\n"
+           "    -V   --version         print version\n"
+           "\n"
+           "FUSE options:\n"
+           "    -d   -o debug          enable debug output (implies -f)\n"
+           "    -f                     foreground operation\n"
+           "    -s                     disable multi-threaded operation\n"
+           "\n"
+           "    -o allow_other         allow access to other users\n"
+           "    -o allow_root          allow access to root\n"
+           "    -o auto_unmount        auto unmount on process termination\n"
+           "    -o nonempty            allow mounts over non-empty file/dir\n"
+           "    -o default_permissions enable permission checking by kernel\n"
+           "    -o fsname=NAME         set filesystem name\n"
+           "    -o subtype=NAME        set filesystem type\n"
+           "    -o large_read          issue large read requests (2.4 only)\n"
+           "    -o max_read=N          set maximum size of read requests\n"
+           "\n"
+           "    -o hard_remove         immediate removal (don't hide files)\n"
+           "    -o use_ino             let filesystem set inode numbers\n"
+           "    -o readdir_ino         try to fill in d_ino in readdir\n"
+           "    -o direct_io           use direct I/O\n"
+           "    -o kernel_cache        cache files in kernel\n"
+           "    -o [no]auto_cache      enable caching based on modification times (off)\n"
+           "    -o umask=M             set file permissions (octal)\n"
+           "    -o uid=N               set file owner\n"
+           "    -o gid=N               set file group\n"
+           "    -o entry_timeout=T     cache timeout for names (1.0s)\n"
+           "    -o negative_timeout=T  cache timeout for deleted names (0.0s)\n"
+           "    -o attr_timeout=T      cache timeout for attributes (1.0s)\n"
+           "    -o ac_attr_timeout=T   auto cache timeout for attributes (attr_timeout)\n"
+           "    -o noforget            never forget cached inodes\n"
+           "    -o remember=T          remember cached inodes for T seconds (0s)\n"
+           "    -o nopath              don't supply path if not necessary\n"
+           "    -o intr                allow requests to be interrupted\n"
+           "    -o intr_signal=NUM     signal to send on interrupt (10)\n"
+           "    -o modules=M1[:M2...]  names of modules to push onto filesystem stack\n"
+           "\n"
+           "    -o max_write=N         set maximum size of write requests\n"
+           "    -o max_readahead=N     set maximum readahead\n"
+           "    -o max_background=N    set number of maximum background requests\n"
+           "    -o congestion_threshold=N  set kernel's congestion threshold\n"
+           "    -o async_read          perform reads asynchronously (default)\n"
+           "    -o sync_read           perform reads synchronously\n"
+           "    -o atomic_o_trunc      enable atomic open+truncate support\n"
+           "    -o big_writes          enable larger than 4kB writes\n"
+           "    -o no_remote_lock      disable remote file locking\n"
+           "    -o no_remote_flock     disable remote file locking (BSD)\n"
+           "    -o no_remote_posix_lock disable remove file locking (POSIX)\n"
+           "    -o [no_]splice_write   use splice to write to the fuse device\n"
+           "    -o [no_]splice_move    move data while splicing to the fuse device\n"
+           "    -o [no_]splice_read    use splice to read from the fuse device\n"
+           "\n"
+           "Module options:\n"
+           "\n"
+           "[iconv]\n"
+           "    -o from_code=CHARSET   original encoding of file names (default: UTF-8)\n"
+           "    -o to_code=CHARSET      new encoding of the file names (default: UTF-8)\n"
+           "\n"
+           "[subdir]\n"
+           "    -o subdir=DIR           prepend this directory to all paths (mandatory)\n"
+           "    -o [no]rellinks         transform absolute symlinks to relative\n");
 }
