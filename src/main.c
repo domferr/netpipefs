@@ -99,6 +99,7 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
     if (strcmp(path, "/") == 0) {
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
+        return 0;
     }
 
     stbuf->st_mode = S_IFREG | 0444;
@@ -157,7 +158,7 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int *fd_skt = (int*)(fuse_get_context()->private_data), confirm;
     size_t size;
-    //TODO gestire caso in cui da un lato viene terminata la connessione
+
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
         if (*fd_skt == -1)
             MINUS1ERR(*fd_skt = socket_listen(), return -ENOENT)
@@ -184,8 +185,9 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         }
 
         fi->fh = fd_client;
-        fi->direct_io = 1;   // avoid kernel caching
-        fi->nonseekable = 1; // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
+        fi->direct_io = 1; // avoid kernel caching
+        // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
+        fi->nonseekable = 1;
     } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
         MINUS1(*fd_skt = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
 
@@ -304,9 +306,29 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
  * Unless FUSE_CAP_HANDLE_KILLPRIV is disabled, this method is
  * expected to reset the setuid and setgid bits.
  *
- * (It is ignored but it seems to be required..)
  */
 static int truncate_callback(const char *path, off_t newsize) {
+    return 0;
+}
+
+/** Read directory
+ *
+ * The filesystem may choose between two modes of operation:
+ *
+ * 1) The readdir implementation ignores the offset parameter, and
+ * passes zero to the filler function's offset.  The filler
+ * function will not return '1' (unless an error happens), so the
+ * whole directory is read in a single readdir operation.
+ *
+ * 2) The readdir implementation keeps track of the offsets of the
+ * directory entries.  It uses the offset parameter and always
+ * passes non-zero offset to the filler function.  When the buffer
+ * is full (or an error happens) the filler function will return
+ * '1'.
+ */
+static int readdir_callback(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
     return 0;
 }
 
@@ -318,7 +340,8 @@ static const struct fuse_operations fspipe_oper = {
     .read = read_callback,
     .write = write_callback,
     .release = release_callback,
-    .truncate = truncate_callback
+    .truncate = truncate_callback,
+    .readdir = readdir_callback
 };
 
 static void show_help(const char *progname)

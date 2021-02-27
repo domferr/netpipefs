@@ -21,7 +21,7 @@ int socket_listen(void) {
     struct sockaddr_un sa = socket_get_address();
     int fd_skt;
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
-    MINUS1(bind(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), return -1)
+    MINUS1(bind(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), return -1)    //TODO should the socket be close on error?
     MINUS1(listen(fd_skt, SOMAXCONN), return -1)
 
     return fd_skt;
