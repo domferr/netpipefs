@@ -47,6 +47,11 @@ static const struct fuse_opt fspipe_opts[] = {
 #define DEBUG(...)						\
 	do { if (fspipe.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
 
+struct fspipe_data {
+    int fd_server;  //used to accept socket connections
+    int fd_skt;     //used to communicate via sockets
+} fspipe_data;
+
 /**
  * Initialize filesystem
  *
@@ -75,12 +80,17 @@ static const struct fuse_opt fspipe_opts[] = {
  * Called on filesystem exit.
  */
 static void destroy_callback(void *privatedata) {
-    DEBUG("\n%s\n", "destroy() callback");
-    int *fd_skt = (int*) privatedata;
-    if (*fd_skt != -1) {
-        close(*fd_skt);
-        socket_destroy();
+    DEBUG("destroy() callback\n");
+
+    if (fspipe_data.fd_server != -1) {
+        close(fspipe_data.fd_server);
     }
+
+    if (fspipe_data.fd_skt != -1) {
+        close(fspipe_data.fd_skt);
+    }
+
+    socket_destroy();
 }
 
 /** Get file attributes.
@@ -96,14 +106,14 @@ static void destroy_callback(void *privatedata) {
  */
 static int getattr_callback(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
+
     if (strcmp(path, "/") == 0) {
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
-        return 0;
+    } else {
+        stbuf->st_mode = S_IFREG | 0444;
+        stbuf->st_nlink = 1;
     }
-
-    stbuf->st_mode = S_IFREG | 0444;
-    stbuf->st_nlink = 1;
 
     return 0;
 }
@@ -156,60 +166,65 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
-    int *fd_skt = (int*)(fuse_get_context()->private_data), confirm;
+    /*
+     * Si blocca fino a quando il file non viene aperto sia in lettura che in scrittura. (man fifo 7)
+     */
+    int confirm, fd;
     size_t size;
 
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
-        if (*fd_skt == -1)
-            MINUS1ERR(*fd_skt = socket_listen(), return -ENOENT)
-        int fd_client;
-        MINUS1(fd_client = socket_accept(*fd_skt, fspipe.timeout), return -ENOENT)
+        if (fspipe_data.fd_skt == -1) {
+            MINUS1ERR(fspipe_data.fd_server = socket_listen(), perror("failed to use the socket"); return -ENOENT)
+            MINUS1(fd = socket_accept(fspipe_data.fd_server, fspipe.timeout), perror("failed to accept"); return -ENOENT)
+        } else {
+            fd = fspipe_data.fd_skt;
+        }
 
         // read what path is requested
-        if (readn(fd_client, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (readn(fd, &size, sizeof(size_t)) <= 0) return -ENOENT;
         char *other_path = (char*) malloc(sizeof(char)*size);
-        EQNULL(other_path, close(fd_client); return -ENOENT)
-        if (readn(fd_client, other_path, sizeof(char)*size) <= 0) {
+        EQNULL(other_path, return -ENOENT)
+        if (readn(fd, other_path, sizeof(char)*size) <= 0) {
             free(other_path);
             return -ENOENT;
         }
-
         // compare its path with mine and send confirmation
         confirm = strcmp(path, other_path) == 0 ? 1:0;
         free(other_path);
-        if (writen(fd_client, &confirm, sizeof(int)) <= 0) return -ENOENT;
-
+        if (writen(fd, &confirm, sizeof(int)) <= 0) return -ENOENT;
         if (!confirm) {
-            close(fd_client);
             return -ENOENT;
         }
 
-        fi->fh = fd_client;
         fi->direct_io = 1; // avoid kernel caching
         // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
         fi->nonseekable = 1;
     } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
-        MINUS1(*fd_skt = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
+        if (fspipe_data.fd_skt == -1) {
+            MINUS1(fd = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
+        } else {
+            fd = fspipe_data.fd_skt;
+        }
 
         // send the path requested by the client
         size = strlen(path);
-        if (writen(*fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
-        if (writen(*fd_skt, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
+        if (writen(fd, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (writen(fd, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
 
         // read the confirmation
-        if (readn(*fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
+        if (readn(fd, &confirm, sizeof(int)) <= 0) return -ENOENT;
 
         if (!confirm) {
-            close(*fd_skt);
             return -ENOENT;
         }
     } else if ((fi->flags & O_ACCMODE) == O_RDWR) {     // open the file for both reading and writing
-        DEBUG("read and write access\n");
+        DEBUG("read and write access not permitted\n");
         return -EINVAL;
     } else {
         return -EINVAL;
     }
 
+    fspipe_data.fd_skt = fd;
     DEBUG("established connection for %s\n", path);
     return 0;
 }
@@ -224,16 +239,16 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    int fd_client = fi->fh; //file descriptor for client communication
-    ssize_t read = readn(fd_client, buf, size);
-    if (read == -1) {
+    //TODO se tutti gli scrittori hanno chiuso il file, allora ritornare 0 (EOF)
+    ssize_t bytes_read = readn(fspipe_data.fd_skt, buf, size);
+    if (bytes_read == -1) {
         if (errno == EPIPE) {
             DEBUG("connection closed on the other side\n");
             return 0;
         }
         return -errno;
     }
-    return read; // return >= 0
+    return bytes_read; // return >= 0
 }
 
 /** Write data to an open file
@@ -246,9 +261,9 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    int *fd_skt = (int*)(fuse_get_context()->private_data);
-    ssize_t wrote = writen(*fd_skt, (void*) buf, size);
-    if (wrote == -1) {
+    //TODO se tutti i lettori hanno chiuso il file, allora ritornare errore EPIPE
+    ssize_t bytes_wrote = writen(fspipe_data.fd_skt, (void*) buf, size);
+    if (bytes_wrote == -1) {
         if (errno == EPIPE) {
             DEBUG("connection closed on the other side\n");
             return 0;
@@ -256,7 +271,7 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
         return -errno;
     }
 
-    return wrote;
+    return bytes_wrote;
 }
 
 /**
@@ -286,15 +301,6 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
-    if ((fi->flags & O_ACCMODE) == O_RDONLY) {
-        MINUS1(close(fi->fh), return -errno)
-    } else {
-        int *fd_skt = (int*)(fuse_get_context()->private_data);
-        MINUS1(close(*fd_skt), return -errno)
-        *fd_skt = -1;
-    }
-
-    DEBUG("closed connection for %s\n", path);
     return 0;
 }
 
@@ -366,9 +372,6 @@ int main(int argc, char** argv) {
        without usage: line (by setting argv[0] to the empty string) */
     if (fspipe.show_help) {
         show_help(argv[0]);
-        //MINUS1ERR(fuse_opt_add_arg(&args, "--help"), return 1)
-        //TODO this is not working. The usage line is still printed by fuse
-        //args.argv[0][0] = '\0'; //setting argv[0] to the empty string
         return 0;
     } else if (fspipe.host == NULL) {
         fprintf(stderr, "missing host\nsee '%s -h' for usage\n", argv[0]);
@@ -378,25 +381,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int *fd_skt;
-    EQNULLERR(fd_skt = (int*) malloc(sizeof(int)), return 1)
-    *fd_skt = -1;
+    fspipe_data.fd_server   = -1;
+    fspipe_data.fd_skt      = -1;
     DEBUG("fspipe running on local port %d and host %s:%d\n", fspipe.port, fspipe.host, fspipe.remote_port);
 
-    int ret = fuse_main(args.argc, args.argv, &fspipe_oper, fd_skt);
+    int ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
 
     DEBUG("%s\n", "cleanup");
     fuse_opt_free_args(&args);
-    free(fd_skt);
     return ret;
 }
 
 static void show_help(const char *progname) {
-    printf("usage: %s [options] <mountpoint>\n\n", progname);
+    printf("usage: %s [options] <mountpoint>\n"
+           "\n", progname);
     printf("fspipe options:\n"
-           "    --host=<s>              When given it will act as a client, otherwise as a server\n"
-           "    --port=<d>              The port used for the socket connection\n"
-           "                            (default: %d)\n"
+           "    --port=<d>             local port used for the socket connection (default: %d)\n"
+           "    --host=<s>             remote host address to which connect to\n"
+           "    --remote_port=<d>      remote port used for the socket connection\n"
            "\n", DEFAULT_PORT);
     printf("general options:\n"
            "    -o opt,[opt...]        mount options\n"
