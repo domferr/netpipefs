@@ -1,6 +1,3 @@
-#include "../include/socketconn.h"
-#include "../include/utils.h"
-#include "../include/scfiles.h"
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <string.h>
@@ -9,6 +6,9 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include "../include/utils.h"
+#include "../include/socketconn.h"
+#include "../include/scfiles.h"
 
 static struct sockaddr_un socket_get_address(void) {
     struct sockaddr_un sa;
@@ -35,7 +35,8 @@ int socket_accept(int fd_skt, long timeout) {
 
     FD_ZERO(&set);
     FD_SET(fd_skt, &set);
-    //aspetto di instaurare una connessione ma se scade il timeout termino
+
+    // aspetto di instaurare una connessione ma se scade il timeout termino
     MINUS1(err = select(fd_skt + 1, &set, NULL, NULL, &time_to_wait), return -1)
     if (err == 0) {
         errno = ETIMEDOUT;
@@ -48,32 +49,43 @@ int socket_accept(int fd_skt, long timeout) {
 }
 
 int socket_connect(long timeout) {
+    ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
     int fd_skt, flags, res;
     struct sockaddr_un sa = socket_get_address();
-    ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
-    struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
 
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
 
     // get socket flags
     ISNEGATIVE(flags = fcntl(fd_skt, F_GETFL, NULL), return -1)
-
-    // set socket non-blocking
+    // set socket to non-blocking
     ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), return -1);
 
     // try to connect
-    if ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
+    while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
+        if (errno == ENOENT && timeout > 0) {
+            long sleeptime = timeout < CONNECT_INTERVAL ? timeout:CONNECT_INTERVAL;
+            MINUS1(msleep(sleeptime), close(fd_skt); return -1)
+            timeout = timeout - sleeptime;
+        } else {
+            break;
+        }
+    }
+
+    if (res < 0) {
         if (errno == EINPROGRESS) {
             fd_set wait_set;
 
             // make file descriptor set with socket
-            FD_ZERO (&wait_set);
+            FD_ZERO(&wait_set);
             FD_SET(fd_skt, &wait_set);
 
             // wait for socket to be writable; return after given timeout
+            struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
             res = select(fd_skt + 1, NULL, &wait_set, NULL, &time_to_wait);
+        } else if (timeout == 0) {
+            res = 0;
         }
-    } else {    // connection was successful immediately
+    } else {
         res = 1;
     }
 
@@ -81,20 +93,20 @@ int socket_connect(long timeout) {
     ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags), return -1)
 
     if (res < 0) {  // an error occurred in connect or select
+        close(fd_skt);
         return -1;
-    } else if (res == 0) {    // select timed out
+    } else if (res == 0) {    // select timed out or attempted to connect many times without success
         errno = ETIMEDOUT;
-        fprintf(stderr, "timeout\n");
+        close(fd_skt);
         return -1;
     } else {
         socklen_t len = sizeof(flags);
-
         // check for errors in socket layer
         ISNEGATIVE(getsockopt(fd_skt, SOL_SOCKET, SO_ERROR, &flags, &len), return -1)
-
         // there was an error
         if (flags) {
             errno = flags;
+            close(fd_skt);
             return -1;
         }
     }

@@ -4,7 +4,8 @@
 #include <stddef.h>
 
 #define DEFAULT_PORT 7000
-#define DEFAULT_TIMEOUT 8000  //Massimo tempo, espresso in millisecondi, per avviare una connessione socket
+#define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
+#define CONNECT_INTERVAL 1000    // Ogni quanti millisecondi riprovare la connect se fallisce
 #define UNIX_PATH_MAX 108
 #define SOCKNAME "/tmp/sockfile.sock"
 
@@ -27,9 +28,10 @@ int socket_listen(void);
 int socket_accept(int fd_skt, long timeout);
 
 /**
- * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di 1 secondo.
- * Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
+ * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di CONNECT_INTERVAL
+ * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
  * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
+ *
  *
  * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
  * tempo di default DEFAULT_TIMEOUT
