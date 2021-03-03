@@ -14,18 +14,13 @@ LIBDIR      = ./libs
 INCLUDES 	= -I $(INCDIR)
 LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR)	# richiesto da FUSE
 
-# dipendenze per l'eseguibile
+# dipendenze per l'eseguibile fspipe
 OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
-				$(OBJDIR)/socketconn.o
+				$(OBJDIR)/socketconn.o	\
+				$(OBJDIR)/utils.o
 
-OBJS_PROD 	= 	$(OBJDIR)/fsprod.o		\
-				$(OBJDIR)/scfiles.o
-
-OBJS_CONS 	= 	$(OBJDIR)/fscons.o		\
-				$(OBJDIR)/scfiles.o
-
-TARGETS	= $(BINDIR)/fspipe $(BINDIR)/fsprod $(BINDIR)/fscons
+TARGETS	= $(BINDIR)/fspipe
 
 .PHONY: all clean cleanall mount_prod mount_cons debug_prod debug_cons usage checkmount unmount
 
@@ -50,12 +45,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 
 # da .c ad eseguibile fspipe
 $(BINDIR)/fspipe: $(OBJS_FSPIPE)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
-
-$(BINDIR)/fsprod: $(OBJS_PROD)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
-
-$(BINDIR)/fscons: $(OBJS_CONS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
 clean:
