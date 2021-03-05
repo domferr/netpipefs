@@ -39,6 +39,19 @@
             then;               \
         }
 
+#define PTH(e, pcall, then)         \
+        if (((e) = (pcall)) != 0) { \
+            errno = e;              \
+            then;                   \
+        }
+
+#define PTHERR(e, pcall, then)      \
+        if (((e) = (pcall)) != 0) { \
+            errno = e;              \
+            perror(#pcall);         \
+            then;                   \
+        }
+
 /**
  * Conversione da millisecondi a secondi
  */
