@@ -49,9 +49,19 @@ int socket_connect(long timeout);
  *
  * @return 0 in caso di successo, -1 altrimenti ed imposta errno
  */
-//int socket_send(int fd_skt, const char *data, size_t size);
+int socket_write_h(int fd_skt, void *data, size_t size);
 
 /**
+ * Legge dal socket i dati attraverso il file descriptor fornito e li ritorna al chiamante.
+ *
+ * @param fd_skt file descriptor sul quale scrivere i dati
+ * @return i dati letti in caso di successo, NULL altrimenti ed imposta errno
+ */
+void *socket_read_h(int fd_skt);
+
+/**
+ * Legge dal socket il numero di bytes indicati. Se la lettura si blocca per più di timeout millisecondi, ritorna -1
+ * e imposta errno a ETIMEDOUT.
  *
  * @param fd_skt file descriptor sul quale leggere i dati
  * @param buf buffer sul quale scrivere i dati lettere
@@ -59,7 +69,7 @@ int socket_connect(long timeout);
  * @return quanti bytes sono stati letti. In caso di errore ritorna -1 ed imposta errno. Se scade il tempo, ritorna -1
  * ed imposta errno a ETIMEDOUT.
  */
-int socket_read(int fd, void *buf, size_t size, long timeout);
+int socket_read_t(int fd, void *buf, size_t size, long timeout);
 
 /**
  * Unlink the file used for the socket communication

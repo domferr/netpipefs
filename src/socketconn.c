@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <fcntl.h>
-#include <stdio.h>
+#include <stdlib.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/scfiles.h"
@@ -56,9 +56,9 @@ int socket_connect(long timeout) {
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
 
     // get socket flags
-    ISNEGATIVE(flags = fcntl(fd_skt, F_GETFL, NULL), return -1)
+    ISNEGATIVE(flags = fcntl(fd_skt, F_GETFL, NULL), close(fd_skt); return -1)
     // set socket to non-blocking
-    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), return -1);
+    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), close(fd_skt); return -1);
 
     // try to connect
     while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
@@ -90,7 +90,7 @@ int socket_connect(long timeout) {
     }
 
     // reset socket flags
-    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags), return -1)
+    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags), close(fd_skt); return -1)
 
     if (res < 0) {  // an error occurred in connect or select
         close(fd_skt);
@@ -114,7 +114,29 @@ int socket_connect(long timeout) {
     return fd_skt;
 }
 
-int socket_read(int fd, void *buf, size_t size, long timeout) {
+int socket_write_h(int fd_skt, void *data, size_t size) {
+    MINUS1(writen(fd_skt, &size, sizeof(size_t)), return -1)
+    return writen(fd_skt, data, size);
+}
+
+void *socket_read_h(int fd_skt) {
+    size_t size = 0;
+    MINUS1(readn(fd_skt, &size, sizeof(size_t)), return NULL)
+    if (size <= 0) {
+        errno = EINVAL;
+        return NULL;
+    }
+    void *data = (void*) malloc(size);
+    EQNULL(data, return NULL)
+    MINUS1(readn(fd_skt, data, size), free(data); return NULL)
+    return data;
+}
+
+int socket_destroy(void) {
+    return unlink(SOCKNAME);
+}
+
+int socket_read_t(int fd, void *buf, size_t size, long timeout) {
     int err;
     ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
     struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
@@ -128,8 +150,4 @@ int socket_read(int fd, void *buf, size_t size, long timeout) {
         return -1;
     }
     return readn(fd, buf, size);
-}
-
-int socket_destroy(void) {
-    return unlink(SOCKNAME);
 }
