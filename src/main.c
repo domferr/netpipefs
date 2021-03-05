@@ -5,52 +5,18 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/scfiles.h"
+#include "../include/dispatcher.h"
+#include "../include/options.h"
 
-/*
- * Command line options
- *
- * We can't set default values for the char* fields here because
- * fuse_opt_parse would attempt to free() them when the user specifies
- * different values on the command line.
- *
- * From https://github.com/libfuse/libfuse/blob/master/example/hello.c
- */
-static struct fspipe {
-    const char *host;
-    int port;
-    int remote_port;
-    int show_help;
-    int debug;
-    long timeout;
-} fspipe;
+/* Command line options */
+struct fspipe_options fspipe_options;
 
-#define FSPIPE_OPT(t, p, v) { t, offsetof(struct fspipe, p), v }
-
-static const struct fuse_opt fspipe_opts[] = {
-        FSPIPE_OPT("--host=%s",         host, 0),
-        FSPIPE_OPT("--port=%d",         port, 0),
-        FSPIPE_OPT("--remote_port=%d",  remote_port, 0),
-        FSPIPE_OPT("--timeout=%d",      timeout, 0),
-        FSPIPE_OPT("-h",                show_help, 1),
-        FSPIPE_OPT("--help",            show_help, 1),
-        FSPIPE_OPT("-d",                debug, 1),
-        FSPIPE_OPT("debug",             debug, 1),
-
-        FUSE_OPT_END
-};
-
-#define DEBUG(...)						\
-	do { if (fspipe.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
-
-struct fspipe_data {
-    int fd_server;  //used to accept socket connections
-    int fd_skt;     //used to communicate via sockets
-} fspipe_data;
+struct fspipe_data fspipe_data;
 
 /**
  * Initialize filesystem
@@ -93,16 +59,14 @@ static void destroy_callback(void *privatedata) {
     socket_destroy();
 }
 
-/** Get file attributes.
+/**
+ * Get file attributes.
  *
  * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
  * ignored. The 'st_ino' field is ignored except if the 'use_ino'
  * mount option is given. In that case it is passed to userspace,
  * but libfuse and the kernel will still assign a different
  * inode for internal use (called the "nodeid").
- *
- * `fi` will always be NULL if the file is not currently open, but
- * may also be NULL if the file is open.
  */
 static int getattr_callback(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
@@ -167,31 +131,57 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     /*
-     * Si blocca fino a quando il file non viene aperto sia in lettura che in scrittura. (man fifo 7)
+     * TODO si blocca fino a quando il file non viene aperto sia in lettura che in scrittura. (man fifo 7)
+     * 0. fspipe_file = find_file_by_path(path);
+     * 0. if (fspipe_file == NULL) fspipe_file = fspipe_file_alloc(path);
+     * 0. lock(fspipe_file->mtx);
+     *
+     * 1. lock(socket_write_mtx);
+     * 1. bytes = write(socket, "header_size OPEN path mode", header_size);
+     * 1. unlock(socket_write_mtx);
+     *
+     * 3. if (bytes <= 0) {
+     *      unlock(fspipe_file->mtx);
+     *      return -errno;
+     *    } else if (read mode) {   //da cambiare in fspipe_file_open(fspipe_file, open mode)
+     *      fspipe_file->readers++;
+     *      // if opening in read mode wait until there is at least one writer
+     *      while (fspipe_file->writers == 0) {
+     *          wait(fspipe_file->nowriters);
+     *      }
+     *    } else if (write mode) {
+     *      fspipe_file->writers++;
+     *      //if opening in write mode then wait until there is at least one reader
+     *      while (fspipe_file->readers == 0) {
+     *          wait(fspipe_file->noreaders);
+     *      }
+     *    }
+     *
+     * 4. unlock(fspipe_file->mtx);
+     *    // successful open
+     * 4. fi->fh = fspipe_file;
+     * 4. fi->direct_io = 1; // avoid kernel caching
+     *    // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
+     * 4. fi->nonseekable = 1;
+     * 4. return 0;
      */
-    int confirm, fd;
+
+    int confirm;
     size_t size;
 
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
-        if (fspipe_data.fd_skt == -1) {
-            MINUS1ERR(fspipe_data.fd_server = socket_listen(), perror("failed to use the socket"); return -ENOENT)
-            MINUS1(fd = socket_accept(fspipe_data.fd_server, fspipe.timeout), perror("failed to accept"); return -ENOENT)
-        } else {
-            fd = fspipe_data.fd_skt;
-        }
-
         // read what path is requested
-        if (readn(fd, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (readn(fspipe_data.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
         char *other_path = (char*) malloc(sizeof(char)*size);
         EQNULL(other_path, return -ENOENT)
-        if (readn(fd, other_path, sizeof(char)*size) <= 0) {
+        if (readn(fspipe_data.fd_skt, other_path, sizeof(char)*size) <= 0) {
             free(other_path);
             return -ENOENT;
         }
         // compare its path with mine and send confirmation
         confirm = strcmp(path, other_path) == 0 ? 1:0;
         free(other_path);
-        if (writen(fd, &confirm, sizeof(int)) <= 0) return -ENOENT;
+        if (writen(fspipe_data.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
         if (!confirm) {
             return -ENOENT;
         }
@@ -200,33 +190,41 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
         fi->nonseekable = 1;
     } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
-        if (fspipe_data.fd_skt == -1) {
-            MINUS1(fd = socket_connect(fspipe.timeout), perror("failed to connect"); return -ENOENT)
-        } else {
-            fd = fspipe_data.fd_skt;
-        }
-
         // send the path requested by the client
         size = strlen(path);
-        if (writen(fd, &size, sizeof(size_t)) <= 0) return -ENOENT;
-        if (writen(fd, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
+        if (writen(fspipe_data.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (writen(fspipe_data.fd_skt, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
 
         // read the confirmation
-        if (readn(fd, &confirm, sizeof(int)) <= 0) return -ENOENT;
+        if (readn(fspipe_data.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
 
         if (!confirm) {
             return -ENOENT;
         }
     } else if ((fi->flags & O_ACCMODE) == O_RDWR) {     // open the file for both reading and writing
-        DEBUG("read and write access not permitted\n");
+        DEBUG("both read and write access not allowed\n");
         return -EINVAL;
     } else {
         return -EINVAL;
     }
 
-    fspipe_data.fd_skt = fd;
-    DEBUG("established connection for %s\n", path);
     return 0;
+}
+
+
+/**
+ * Create and open a file
+ *
+ * If the file does not exist, first create it with the specified
+ * mode, and then open it.
+ *
+ * If this method is not implemented or under Linux kernel
+ * versions earlier than 2.6.15, the mknod() and open() methods
+ * will be called instead.
+ */
+static int create_callback(const char *path, mode_t mode, struct fuse_file_info *fi) {
+    DEBUG("create() callback\n");
+    return open_callback(path, fi);
 }
 
 /** Read data from an open file
@@ -240,11 +238,28 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //TODO se tutti gli scrittori hanno chiuso il file, allora ritornare 0 (EOF)
+    /*
+     * 0. fspipe_file = fi->fh;
+     *
+     *    //da cambiare in fspipe_file_read(fspipe_file, buf, size);
+     * 1. bytes = readn(fspipe_file->fd[READ_END], size);
+     *
+     * 2. lock(fspipe_file->mtx);
+     * 2. fspipe_file->size -= bytes;
+     * 2. unlock(fspipe_file->mtx);
+     * 2. if (bytes == 0) return -errno;
+     *
+     * 3. lock(socket_write_mtx);
+     * 3. sent = write(socket, "header_size READ path bytes", header_size);
+     * 3. unlock(socket_write_mtx);
+     *
+     * 4. return bytes;
+     */
     ssize_t bytes_read = readn(fspipe_data.fd_skt, buf, size);
     if (bytes_read == -1) {
         if (errno == EPIPE) {
             DEBUG("connection closed on the other side\n");
-            return 0;
+            return 0;   // return EOF
         }
         return -errno;
     }
@@ -262,6 +277,34 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //TODO se tutti i lettori hanno chiuso il file, allora ritornare errore EPIPE
+    /*
+     * 0. fspipe_file = fi->fh;
+     * 0. lock(fspipe_file->mtx);
+     *    // se tutti i lettori hanno chiuso il file, allora ritornare errore EPIPE
+     * 0. if (fspipe_file->readers == 0) unlock(fspipe_file->mtx); return -EPIPE;
+     *
+     *    // aspetta che l'altro abbia abbastanza spazio
+     * 1. while(fspipe_file->size + size > fspipe_file->capacity) {
+     *      wait(fspipe_file->nospace);
+     *    }
+     *
+     *    // invia i dati tramite socket
+     * 2. lock(socket_write_mtx);
+     * 2. bytes = write(socket, "header_size WRITE path size", header_size);
+     * 2. if (bytes > 0) bytes = write(socket, buf, size);
+     * 2. unlock(socket_write_mtx);
+     *
+     *    // questo dovrebbe succedere solo se l'altro ha risposto "scritto con successo"
+     * 3. if (bytes > 0) {
+     *      fspipe_file->size += bytes;
+     *    } else {
+     *      unlock(fspipe_file->mtx);
+     *      return -errno;
+     *    }
+     *
+     * 3. unlock(fspipe_file->mtx);
+     * 3. return bytes;
+     */
     ssize_t bytes_wrote = writen(fspipe_data.fd_skt, (void*) buf, size);
     if (bytes_wrote == -1) {
         if (errno == EPIPE) {
@@ -272,20 +315,6 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
     }
 
     return bytes_wrote;
-}
-
-/**
- * Create and open a file
- *
- * If the file does not exist, first create it with the specified
- * mode, and then open it.
- *
- * If this method is not implemented or under Linux kernel
- * versions earlier than 2.6.15, the mknod() and open() methods
- * will be called instead.
- */
-static int create_callback(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    return open_callback(path, fi);
 }
 
 /** Release an open file
@@ -301,6 +330,27 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
+    /*
+     * 0. fspipe_file = fi->fh;
+     *
+     * 1. lock(fspipe_file->mtx);
+     *
+     *    // cambiare in fspipe_file_close(fspipe_file, mode);
+     * 1. if (read mode) {
+     *      fspipe_file->readers--;
+     *      close(fspipe_file->fd[READ_END]);
+     *    } else if (write mode) {
+     *      fspipe_file->writers--;
+     *      close(fspipe_file->fd[WRITE_END]);
+     *    }
+     *
+     * 1. unlock(fspipe_file->mtx);
+     *
+     * 2. lock(socket_write_mtx);
+     * 2. sent = write(socket, "header_size CLOSE path mode", header_size);
+     * 2. unlock(socket_write_mtx);
+     */
+
     return 0;
 }
 
@@ -350,118 +400,49 @@ static const struct fuse_operations fspipe_oper = {
     .readdir = readdir_callback
 };
 
-static void show_help(const char *progname);
-
-int main(int argc, char** argv) {
-    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-
-    /* Set defaults */
-    fspipe.timeout = DEFAULT_TIMEOUT;
-    fspipe.host = NULL;
-    fspipe.port = DEFAULT_PORT;
-    fspipe.remote_port = -1;
-
-    /* Parse options */
-    MINUS1ERR(fuse_opt_parse(&args, &fspipe, fspipe_opts, NULL), return 1)
-
-    if (fspipe.debug) {
-        MINUS1ERR(fuse_opt_add_arg(&args, "-d"), return 1)
-    }
-    /* When --help is specified, first print file-system specific help text,
-       then signal fuse_main to show additional help (by adding `--help` to the options again)
-       without usage: line (by setting argv[0] to the empty string) */
-    if (fspipe.show_help) {
-        show_help(argv[0]);
-        return 0;
-    } else if (fspipe.host == NULL) {
-        fprintf(stderr, "missing host\nsee '%s -h' for usage\n", argv[0]);
-        return 1;
-    } else if (fspipe.remote_port == -1) {
-        fprintf(stderr, "missing remote port\nsee '%s -h' for usage\n", argv[0]);
-        return 1;
-    }
-
+static int establish_socket_connection(int is_server) {
     fspipe_data.fd_server   = -1;
     fspipe_data.fd_skt      = -1;
-    DEBUG("fspipe running on local port %d and host %s:%d\n", fspipe.port, fspipe.host, fspipe.remote_port);
 
-    int ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
+    if (is_server) {
+        MINUS1(fspipe_data.fd_server = socket_listen(), return -1)
+        MINUS1(fspipe_data.fd_skt = socket_accept(fspipe_data.fd_server, fspipe_options.timeout), return -1)
+    } else {
+        MINUS1(fspipe_data.fd_skt = socket_connect(fspipe_options.timeout), return -1)
+    }
+
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    int ret;
+    struct dispatcher *dispatcher;
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+
+    /* Parse options */
+    ret = fspipe_opt_parse(argv[0], &args);
+    if (ret == -1) {
+        perror("failed to parse command line options");
+        return EXIT_FAILURE;
+    } else if (ret == 1) {
+        return EXIT_SUCCESS;
+    }
+
+    MINUS1(establish_socket_connection(fspipe_options.is_server), perror("unable to establish socket communication"); fuse_opt_free_args(&args); return EXIT_FAILURE)
+
+    /* Run dispatcher */
+    EQNULL(dispatcher = fspipe_dispatcher_run(), perror("failed to run dispatcher"); fuse_opt_free_args(&args); return EXIT_FAILURE)
+
+    /* Run fuse loop. Block until CTRL+C or fusermount -u */
+    DEBUG("fspipe running on local port %d and remote host %s:%d\n", fspipe_options.port, fspipe_options.host, fspipe_options.remote_port);
+    ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
+    if (ret == 1) perror("fuse_main()");
 
     DEBUG("%s\n", "cleanup");
     fuse_opt_free_args(&args);
-    return ret;
-}
+    MINUS1(fspipe_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
+    MINUS1(fspipe_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
+    fspipe_dispatcher_free(dispatcher);
 
-static void show_help(const char *progname) {
-    printf("usage: %s [options] <mountpoint>\n"
-           "\n", progname);
-    printf("fspipe options:\n"
-           "    --port=<d>             local port used for the socket connection (default: %d)\n"
-           "    --host=<s>             remote host address to which connect to\n"
-           "    --remote_port=<d>      remote port used for the socket connection\n"
-           "\n", DEFAULT_PORT);
-    printf("general options:\n"
-           "    -o opt,[opt...]        mount options\n"
-           "    -h   --help            print help\n"
-           "    -V   --version         print version\n"
-           "\n"
-           "FUSE options:\n"
-           "    -d   -o debug          enable debug output (implies -f)\n"
-           "    -f                     foreground operation\n"
-           "    -s                     disable multi-threaded operation\n"
-           "\n"
-           "    -o allow_other         allow access to other users\n"
-           "    -o allow_root          allow access to root\n"
-           "    -o auto_unmount        auto unmount on process termination\n"
-           "    -o nonempty            allow mounts over non-empty file/dir\n"
-           "    -o default_permissions enable permission checking by kernel\n"
-           "    -o fsname=NAME         set filesystem name\n"
-           "    -o subtype=NAME        set filesystem type\n"
-           "    -o large_read          issue large read requests (2.4 only)\n"
-           "    -o max_read=N          set maximum size of read requests\n"
-           "\n"
-           "    -o hard_remove         immediate removal (don't hide files)\n"
-           "    -o use_ino             let filesystem set inode numbers\n"
-           "    -o readdir_ino         try to fill in d_ino in readdir\n"
-           "    -o direct_io           use direct I/O\n"
-           "    -o kernel_cache        cache files in kernel\n"
-           "    -o [no]auto_cache      enable caching based on modification times (off)\n"
-           "    -o umask=M             set file permissions (octal)\n"
-           "    -o uid=N               set file owner\n"
-           "    -o gid=N               set file group\n"
-           "    -o entry_timeout=T     cache timeout for names (1.0s)\n"
-           "    -o negative_timeout=T  cache timeout for deleted names (0.0s)\n"
-           "    -o attr_timeout=T      cache timeout for attributes (1.0s)\n"
-           "    -o ac_attr_timeout=T   auto cache timeout for attributes (attr_timeout)\n"
-           "    -o noforget            never forget cached inodes\n"
-           "    -o remember=T          remember cached inodes for T seconds (0s)\n"
-           "    -o nopath              don't supply path if not necessary\n"
-           "    -o intr                allow requests to be interrupted\n"
-           "    -o intr_signal=NUM     signal to send on interrupt (10)\n"
-           "    -o modules=M1[:M2...]  names of modules to push onto filesystem stack\n"
-           "\n"
-           "    -o max_write=N         set maximum size of write requests\n"
-           "    -o max_readahead=N     set maximum readahead\n"
-           "    -o max_background=N    set number of maximum background requests\n"
-           "    -o congestion_threshold=N  set kernel's congestion threshold\n"
-           "    -o async_read          perform reads asynchronously (default)\n"
-           "    -o sync_read           perform reads synchronously\n"
-           "    -o atomic_o_trunc      enable atomic open+truncate support\n"
-           "    -o big_writes          enable larger than 4kB writes\n"
-           "    -o no_remote_lock      disable remote file locking\n"
-           "    -o no_remote_flock     disable remote file locking (BSD)\n"
-           "    -o no_remote_posix_lock disable remove file locking (POSIX)\n"
-           "    -o [no_]splice_write   use splice to write to the fuse device\n"
-           "    -o [no_]splice_move    move data while splicing to the fuse device\n"
-           "    -o [no_]splice_read    use splice to read from the fuse device\n"
-           "\n"
-           "Module options:\n"
-           "\n"
-           "[iconv]\n"
-           "    -o from_code=CHARSET   original encoding of file names (default: UTF-8)\n"
-           "    -o to_code=CHARSET      new encoding of the file names (default: UTF-8)\n"
-           "\n"
-           "[subdir]\n"
-           "    -o subdir=DIR           prepend this directory to all paths (mandatory)\n"
-           "    -o [no]rellinks         transform absolute symlinks to relative\n");
+    return ret;
 }

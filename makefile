@@ -12,12 +12,15 @@ BINDIR   	= ./bin
 LIBDIR      = ./libs
 
 INCLUDES 	= -I $(INCDIR)
-LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR)	# richiesto da FUSE
+LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # richiesto da FUSE
+LIBS		= -lpthread
 
 # dipendenze per l'eseguibile fspipe
 OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o	\
+				$(OBJDIR)/dispatcher.o	\
+				$(OBJDIR)/options.o		\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/fspipe
@@ -45,7 +48,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 
 # da .c ad eseguibile fspipe
 $(BINDIR)/fspipe: $(OBJS_FSPIPE)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:
 	rm -f $(TARGETS)
@@ -64,16 +67,16 @@ mount_prod: all
 	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
 
 mount_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 --server -s $(CONS_MOUNTPOINT)
 
 debug_prod: all
 	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -o debug -s $(PROD_MOUNTPOINT)
 
 debug_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 --server -d -s $(CONS_MOUNTPOINT)
 
 # run with help flag
-usage: all
+fspipe_usage: all
 	$(BINDIR)/fspipe -h
 
 checkmount:
