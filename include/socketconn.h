@@ -1,13 +1,23 @@
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 
-#include <stddef.h>
-
 #define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define CONNECT_INTERVAL 1000    // Ogni quanti millisecondi riprovare la connect se fallisce
 #define UNIX_PATH_MAX 108
 #define SOCKNAME "/tmp/sockfile.sock"
+
+struct fspipe_socket {
+    int fd_server;  // used to accept socket connections
+    int fd_skt;     // used to communicate via sockets
+    pthread_mutex_t writesktmtx;
+};
+
+enum socket_message {
+    OPEN = 100,
+    OPEN_CONFIRM,
+    CLOSE
+};
 
 /**
  * Crea un socket AF_UNIX ed esegue il binding del socket e la chiamata di sistema listen() sul socket.
@@ -51,13 +61,13 @@ int socket_connect(long timeout);
  */
 int socket_write_h(int fd_skt, void *data, size_t size);
 
-/**
+/**TODO change this doc
  * Legge dal socket i dati attraverso il file descriptor fornito e li ritorna al chiamante.
  *
  * @param fd_skt file descriptor sul quale scrivere i dati
  * @return i dati letti in caso di successo, NULL altrimenti ed imposta errno
  */
-void *socket_read_h(int fd_skt);
+int socket_read_h(int fd_skt, void **ptr);
 
 /**
  * Legge dal socket il numero di bytes indicati. Se la lettura si blocca per più di timeout millisecondi, ritorna -1

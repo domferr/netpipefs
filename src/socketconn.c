@@ -115,21 +115,30 @@ int socket_connect(long timeout) {
 }
 
 int socket_write_h(int fd_skt, void *data, size_t size) {
-    MINUS1(writen(fd_skt, &size, sizeof(size_t)), return -1)
-    return writen(fd_skt, data, size);
+    int bytes = writen(fd_skt, &size, sizeof(size_t));
+    if (bytes > 0)
+        return writen(fd_skt, data, size);
+    return bytes;
 }
 
-void *socket_read_h(int fd_skt) {
+int socket_read_h(int fd_skt, void **ptr) {
+    int bytes;
     size_t size = 0;
-    MINUS1(readn(fd_skt, &size, sizeof(size_t)), return NULL)
+    bytes = readn(fd_skt, &size, sizeof(size_t));
+    if (bytes <= 0) return bytes;
+
     if (size <= 0) {
         errno = EINVAL;
-        return NULL;
+        return -1;
     }
-    void *data = (void*) malloc(size);
-    EQNULL(data, return NULL)
-    MINUS1(readn(fd_skt, data, size), free(data); return NULL)
-    return data;
+
+    if (*ptr != NULL) free(*ptr);
+    EQNULL(*ptr = (void*) malloc(size), return -1)
+
+    bytes = readn(fd_skt, *ptr, size);
+    if (bytes <= 0) free(*ptr);
+
+    return bytes;
 }
 
 int socket_destroy(void) {
