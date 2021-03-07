@@ -12,11 +12,12 @@
 #include "../include/scfiles.h"
 #include "../include/dispatcher.h"
 #include "../include/options.h"
+#include "../include/fspipe_file.h"
 
 /* Command line options */
 struct fspipe_options fspipe_options;
 
-struct fspipe_data fspipe_data;
+struct fspipe_socket fspipe_socket;
 
 /**
  * Initialize filesystem
@@ -48,12 +49,12 @@ struct fspipe_data fspipe_data;
 static void destroy_callback(void *privatedata) {
     DEBUG("destroy() callback\n");
 
-    if (fspipe_data.fd_server != -1) {
-        close(fspipe_data.fd_server);
+    if (fspipe_socket.fd_server != -1) {
+        close(fspipe_socket.fd_server);
     }
 
-    if (fspipe_data.fd_skt != -1) {
-        close(fspipe_data.fd_skt);
+    if (fspipe_socket.fd_skt != -1) {
+        close(fspipe_socket.fd_skt);
     }
 
     socket_destroy();
@@ -82,9 +83,8 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
     return 0;
 }
 
-/** Open a file
- *
- * Open flags are available in fi->flags. The following rules
+/**
+ * Open a file. Open flags are available in fi->flags. The following rules
  * apply.
  *
  *  - Creation (O_CREAT, O_EXCL, O_NOCTTY) flags will be
@@ -130,8 +130,36 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
+    int err, mode = fi->flags & O_ACCMODE;
+    struct fspipe_file *fspipe_file;
+
+    if (mode == O_RDWR) {     // open the file for both reading and writing
+        DEBUG("both read and write access is not allowed\n");
+        return -EINVAL;
+    }
+
+    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
+
+    // send: OPEN strlen(path) path mode
+    enum socket_message message = OPEN;
+    MINUS1(writen(fspipe_socket.fd_skt, &message, sizeof(enum socket_message)), return -errno)
+    MINUS1(socket_write_h(fspipe_socket.fd_skt, (void*) path, strlen(path)), return -errno)
+    MINUS1(writen(fspipe_socket.fd_skt, &mode, sizeof(int)), return -errno)
+
+    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
+
+    DEBUG("sent: %d %s %d\n", message, path, mode);
+
+    EQNULL(fspipe_file = fspipe_file_open_local(path, mode), return -errno)
+
+    fi->fh = (uint64_t) fspipe_file;
+    fi->direct_io = 1; // avoid kernel caching
+    // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
+    fi->nonseekable = 1;
+
+    return 0;
+
     /*
-     * TODO si blocca fino a quando il file non viene aperto sia in lettura che in scrittura. (man fifo 7)
      * 0. fspipe_file = find_file_by_path(path);
      * 0. if (fspipe_file == NULL) fspipe_file = fspipe_file_alloc(path);
      * 0. lock(fspipe_file->mtx);
@@ -166,22 +194,22 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
      * 4. return 0;
      */
 
-    int confirm;
+    /*int confirm;
     size_t size;
 
     if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
         // read what path is requested
-        if (readn(fspipe_data.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (readn(fspipe_socket.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
         char *other_path = (char*) malloc(sizeof(char)*size);
         EQNULL(other_path, return -ENOENT)
-        if (readn(fspipe_data.fd_skt, other_path, sizeof(char)*size) <= 0) {
+        if (readn(fspipe_socket.fd_skt, other_path, sizeof(char) * size) <= 0) {
             free(other_path);
             return -ENOENT;
         }
         // compare its path with mine and send confirmation
         confirm = strcmp(path, other_path) == 0 ? 1:0;
         free(other_path);
-        if (writen(fspipe_data.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
+        if (writen(fspipe_socket.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
         if (!confirm) {
             return -ENOENT;
         }
@@ -192,11 +220,11 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
         // send the path requested by the client
         size = strlen(path);
-        if (writen(fspipe_data.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
-        if (writen(fspipe_data.fd_skt, (void*) path, sizeof(char)*size) <= 0) return -ENOENT;
+        if (writen(fspipe_socket.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
+        if (writen(fspipe_socket.fd_skt, (void*) path, sizeof(char) * size) <= 0) return -ENOENT;
 
         // read the confirmation
-        if (readn(fspipe_data.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
+        if (readn(fspipe_socket.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
 
         if (!confirm) {
             return -ENOENT;
@@ -208,7 +236,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         return -EINVAL;
     }
 
-    return 0;
+    return 0;*/
 }
 
 
@@ -255,7 +283,7 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
      *
      * 4. return bytes;
      */
-    ssize_t bytes_read = readn(fspipe_data.fd_skt, buf, size);
+    ssize_t bytes_read = readn(fspipe_socket.fd_skt, buf, size);
     if (bytes_read == -1) {
         if (errno == EPIPE) {
             DEBUG("connection closed on the other side\n");
@@ -305,7 +333,7 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
      * 3. unlock(fspipe_file->mtx);
      * 3. return bytes;
      */
-    ssize_t bytes_wrote = writen(fspipe_data.fd_skt, (void*) buf, size);
+    ssize_t bytes_wrote = writen(fspipe_socket.fd_skt, (void*) buf, size);
     if (bytes_wrote == -1) {
         if (errno == EPIPE) {
             DEBUG("connection closed on the other side\n");
@@ -330,6 +358,24 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
+    struct fspipe_file *fspipe_file = (struct fspipe_file *) fi->fh;
+    int err, mode = fi->flags & O_ACCMODE;
+
+    MINUS1(fspipe_file_close(fspipe_file, mode), return -errno)
+
+    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
+
+    // send: CLOSE strlen(path) path mode
+    enum socket_message message = CLOSE;
+    MINUS1(writen(fspipe_socket.fd_skt, &message, sizeof(enum socket_message)), return -errno)
+    MINUS1(socket_write_h(fspipe_socket.fd_skt, (void*) path, strlen(path)), return -errno)
+    MINUS1(writen(fspipe_socket.fd_skt, &mode, sizeof(int)), return -errno)
+    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
+
+    DEBUG("sent: %d %s %d\n", message, path, mode);
+
+    return 0;
+
     /*
      * 0. fspipe_file = fi->fh;
      *
@@ -338,10 +384,10 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
      *    // cambiare in fspipe_file_close(fspipe_file, mode);
      * 1. if (read mode) {
      *      fspipe_file->readers--;
-     *      close(fspipe_file->fd[READ_END]);
+     *      if (fspipe_file->readers == 0) close(fspipe_file->fd[READ_END]);
      *    } else if (write mode) {
      *      fspipe_file->writers--;
-     *      close(fspipe_file->fd[WRITE_END]);
+     *      if (fspipe_file->writers == 0) close(fspipe_file->fd[WRITE_END]);
      *    }
      *
      * 1. unlock(fspipe_file->mtx);
@@ -401,16 +447,19 @@ static const struct fuse_operations fspipe_oper = {
 };
 
 static int establish_socket_connection(int is_server) {
-    fspipe_data.fd_server   = -1;
-    fspipe_data.fd_skt      = -1;
+    //TODO handle error cases
+    int err;
+    fspipe_socket.fd_server   = -1;
+    fspipe_socket.fd_skt      = -1;
 
     if (is_server) {
-        MINUS1(fspipe_data.fd_server = socket_listen(), return -1)
-        MINUS1(fspipe_data.fd_skt = socket_accept(fspipe_data.fd_server, fspipe_options.timeout), return -1)
+        MINUS1(fspipe_socket.fd_server = socket_listen(), return -1)
+        MINUS1(fspipe_socket.fd_skt = socket_accept(fspipe_socket.fd_server, fspipe_options.timeout), close(fspipe_socket.fd_server); return -1)
     } else {
-        MINUS1(fspipe_data.fd_skt = socket_connect(fspipe_options.timeout), return -1)
+        MINUS1(fspipe_socket.fd_skt = socket_connect(fspipe_options.timeout), return -1)
     }
 
+    PTH(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return -1)
     return 0;
 }
 
@@ -431,7 +480,7 @@ int main(int argc, char** argv) {
     MINUS1(establish_socket_connection(fspipe_options.is_server), perror("unable to establish socket communication"); fuse_opt_free_args(&args); return EXIT_FAILURE)
 
     /* Run dispatcher */
-    EQNULL(dispatcher = fspipe_dispatcher_run(), perror("failed to run dispatcher"); fuse_opt_free_args(&args); return EXIT_FAILURE)
+    EQNULL(dispatcher = fspipe_dispatcher_run(&fspipe_socket), perror("failed to run dispatcher"); fuse_opt_free_args(&args); return EXIT_FAILURE)
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
     DEBUG("fspipe running on local port %d and remote host %s:%d\n", fspipe_options.port, fspipe_options.host, fspipe_options.remote_port);

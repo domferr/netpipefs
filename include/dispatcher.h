@@ -1,19 +1,13 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
-struct fspipe_data {
-    int fd_server;  // used to accept socket connections
-    int fd_skt;     // used to communicate via sockets
-};
-
 struct dispatcher {
+    struct fspipe_socket *fspipe_socket;
     pthread_t tid;
-    int *pipefd;
+    int pipefd[2];
 };
 
-void *fspipe_dispatcher_fun(void *args);
-
-struct dispatcher *fspipe_dispatcher_run(void);
+struct dispatcher *fspipe_dispatcher_run(struct fspipe_socket *fspipe_data);
 
 int fspipe_dispatcher_stop(struct dispatcher *dispatcher);
 
