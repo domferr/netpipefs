@@ -21,6 +21,7 @@ OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/socketconn.o	\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
+				$(OBJDIR)/fspipe_file.o	\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/fspipe
