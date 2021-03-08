@@ -160,3 +160,14 @@ int socket_read_t(int fd, void *buf, size_t size, long timeout) {
     }
     return readn(fd, buf, size);
 }
+
+int write_socket_message(int fd_skt, enum socket_message message, const char *path, int mode) {
+    int bytes = writen(fd_skt, &message, sizeof(enum socket_message));
+    if (bytes <= 0) return bytes;
+
+    bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));
+    if (bytes <= 0) return bytes;
+
+    if (mode != -1) bytes = writen(fd_skt, &mode, sizeof(int));
+    return bytes;
+}
