@@ -3,7 +3,7 @@ CFLAGS	= -g -Wall -pedantic -D_POSIX_C_SOURCE=200809L -Wextra 		\
 		-Wwrite-strings -Wstrict-prototypes -Wold-style-definition 	\
 		-Wformat=2 -Wno-unused-parameter -Wshadow 					\
 		-Wredundant-decls -Wnested-externs -Wmissing-include-dirs 	\
-		-D_FILE_OFFSET_BITS=64 `pkg-config fuse --cflags` # richiesto da FUSE
+		-D_FILE_OFFSET_BITS=64 `pkg-config fuse --cflags` # required by FUSE
 
 SRCDIR  	= ./src
 INCDIR		= ./include
@@ -15,13 +15,14 @@ INCLUDES 	= -I $(INCDIR)
 LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # richiesto da FUSE
 LIBS		= -lpthread
 
-# dipendenze per l'eseguibile fspipe
+# dependencies for fspipe executable
 OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o	\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
 				$(OBJDIR)/fspipe_file.o	\
+				$(OBJDIR)/icl_hash.o	\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/fspipe
@@ -39,15 +40,12 @@ $(OBJDIR):
 $(INCDIR):
 	mkdir $(INCDIR)
 
-# generazione di un .o da un .c con il relativo .h come dipendenza
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(INCDIR)/%.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-# generazione di un .o da un .c senza relativo .h
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-# da .c ad eseguibile fspipe
 $(BINDIR)/fspipe: $(OBJS_FSPIPE)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
