@@ -3,6 +3,7 @@
 #include "../include/utils.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define FSPIPE_OPT(t, p, v) { t, offsetof(struct fspipe_options, p), v }
 
@@ -18,7 +19,7 @@ static const struct fuse_opt fspipe_opts[] = {
         FSPIPE_OPT("--help",            show_help, 1),
         FSPIPE_OPT("-d",                debug, 1),
         FSPIPE_OPT("debug",             debug, 1),
-        FSPIPE_OPT("--server",            is_server, 1),
+        FSPIPE_OPT("--server",          is_server, 1),
 
         FUSE_OPT_END
 };
@@ -36,6 +37,7 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     /* When --help is specified, first print usage text, then exit with success */
     if (fspipe_options.show_help) {
         fspipe_usage(progname);
+        return 1;
     } else if (fspipe_options.host == NULL) {
         fprintf(stderr, "missing host\nsee '%s -h' for usage\n", progname);
         return 1;
@@ -49,6 +51,11 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     }
 
     return 0;
+}
+
+void fspipe_opt_free(struct fuse_args *args) {
+    if (fspipe_options.host) free((void*) fspipe_options.host);
+    fuse_opt_free_args(args);
 }
 
 /** Prints FUSE's usage without the "fspipe_usage: ..." line */

@@ -27,6 +27,7 @@ extern struct fspipe_options fspipe_options;
 	do { if (fspipe_options.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
 
 int fspipe_opt_parse(const char *progname, struct fuse_args *args);
+void fspipe_opt_free(struct fuse_args *args);
 
 /**
  * Prints FSPipe's usage.
