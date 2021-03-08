@@ -3,8 +3,8 @@
 
 struct dispatcher {
     struct fspipe_socket *fspipe_socket;
-    pthread_t tid;
-    int pipefd[2];
+    pthread_t tid;  // dispatcher's thread id
+    int pipefd[2];  // used to communicate with main thread
 };
 
 struct dispatcher *fspipe_dispatcher_run(struct fspipe_socket *fspipe_data);

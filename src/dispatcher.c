@@ -12,7 +12,7 @@
 #include "../include/socketconn.h"
 #include "../include/fspipe_file.h"
 
-static int read_socket_message(struct fspipe_socket *fspipe_socket, enum socket_message *message, const char **path) {
+static int read_socket_message(struct fspipe_socket *fspipe_socket, enum socket_message *message, char **path) {
     int bytes = readn(fspipe_socket->fd_skt, message, sizeof(enum socket_message));
     if (bytes > 0)
         return socket_read_h(fspipe_socket->fd_skt, (void**) path);
@@ -20,27 +20,8 @@ static int read_socket_message(struct fspipe_socket *fspipe_socket, enum socket_
     return bytes;
 }
 
-static int handle_open(struct fspipe_socket *fspipe_socket, const char *path, int mode) {
-    int err, error = 0;
-
-    EQNULL(fspipe_file_open_remote(path, mode, 0), error = errno)
-
-    // send: OPEN_CONFIRM strlen(path) path mode error
-    PTH(err, pthread_mutex_lock(&(fspipe_socket->writesktmtx)), return -1)
-
-    enum socket_message response = OPEN_CONFIRM; //TODO handle writen() return 0
-    MINUS1(writen(fspipe_socket->fd_skt, &response, sizeof(enum socket_message)), return -1)
-    MINUS1(socket_write_h(fspipe_socket->fd_skt, (void*) path, sizeof(char)*strlen(path)), return -1)
-    MINUS1(writen(fspipe_socket->fd_skt, &mode, sizeof(int)), return -1)
-    MINUS1(writen(fspipe_socket->fd_skt, &error, sizeof(int)), return -1)
-
-    PTH(err, pthread_mutex_unlock(&(fspipe_socket->writesktmtx)), return -1)
-
-    return 0;
-}
-
 static void *fspipe_dispatcher_fun(void *args) {
-    int bytes, err, run = 1;
+    int bytes = 1, err, run = 1;
     struct dispatcher *dispatcher = (struct dispatcher *) args;
     struct fspipe_socket *fspipe_socket = dispatcher->fspipe_socket;
     DEBUG("%s\n", "dispatcher - running");
@@ -60,8 +41,8 @@ static void *fspipe_dispatcher_fun(void *args) {
             run = 0;
         } else {    // can read from socket
             enum socket_message message;
-            const char *path = NULL;
-            int mode, remote_error;
+            char *path = NULL;
+            int mode, remote_error = 0;
             if ((bytes = read_socket_message(fspipe_socket, &message, &path)) == -1) {
                 perror("dispatcher - failed to read socket message");
             } else if (bytes > 0) {
@@ -70,7 +51,16 @@ static void *fspipe_dispatcher_fun(void *args) {
                         bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
                         if (bytes > 0) {
                             DEBUG("remote: OPEN %s %d\n", path, mode);
-                            MINUS1ERR(handle_open(fspipe_socket, path, mode), run = 0)
+                            EQNULL(fspipe_file_open_remote(path, mode, 0), remote_error = errno; run = 0; break)
+
+                            // send: OPEN_CONFIRM path mode remote_error
+                            PTH(err, pthread_mutex_lock(&(fspipe_socket->writesktmtx)), run = 0; break)
+                            bytes = write_socket_message(fspipe_socket->fd_skt, OPEN_CONFIRM, path, mode);
+                            if (bytes > 0) {
+                                bytes = writen(fspipe_socket->fd_skt, &remote_error, sizeof(int));
+                            }
+                            PTH(err, pthread_mutex_unlock(&(fspipe_socket->writesktmtx)), run = 0)
+                            if (bytes > 0) DEBUG("sent: OPEN_CONFIRM %s %d %d\n", path, mode, remote_error);
                         }
                         break;
                     case OPEN_CONFIRM:
@@ -93,7 +83,7 @@ static void *fspipe_dispatcher_fun(void *args) {
                     default:
                         break;
                 }
-                free((void *) path);
+                free(path);
             }
 
             run = bytes > 0;
