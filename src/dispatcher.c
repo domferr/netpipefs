@@ -77,7 +77,7 @@ static void *fspipe_dispatcher_fun(void *args) {
                         bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
                         if (bytes > 0) {
                             DEBUG("remote: CLOSE %s %d\n", path, mode);
-                            MINUS1ERR(fspipe_file_close_p(path, mode), run = 0)
+                            MINUS1ERR(fspipe_file_close(path, mode), run = 0)
                         }
                         break;
                     default:

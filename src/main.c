@@ -48,16 +48,6 @@ struct fspipe_socket fspipe_socket;
  */
 static void destroy_callback(void *privatedata) {
     DEBUG("destroy() callback\n");
-
-    if (fspipe_socket.fd_server != -1) {
-        close(fspipe_socket.fd_server);
-    }
-
-    if (fspipe_socket.fd_skt != -1) {
-        close(fspipe_socket.fd_skt);
-    }
-
-    socket_destroy();
 }
 
 /**
@@ -130,8 +120,7 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
-    int err, mode = fi->flags & O_ACCMODE;
-    struct fspipe_file *fspipe_file;
+    int bytes, err, mode = fi->flags & O_ACCMODE;
 
     if (mode == O_RDWR) {     // open the file for both reading and writing
         DEBUG("both read and write access is not allowed\n");
@@ -139,104 +128,19 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     }
 
     PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
-
-    // send: OPEN strlen(path) path mode
-    enum socket_message message = OPEN;
-    MINUS1(writen(fspipe_socket.fd_skt, &message, sizeof(enum socket_message)), return -errno)
-    MINUS1(socket_write_h(fspipe_socket.fd_skt, (void*) path, strlen(path)), return -errno)
-    MINUS1(writen(fspipe_socket.fd_skt, &mode, sizeof(int)), return -errno)
-
+    bytes = write_socket_message(fspipe_socket.fd_skt, OPEN, path, mode);
     PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
+    if (bytes <= 0) return -errno;
 
-    DEBUG("sent: %d %s %d\n", message, path, mode);
+    DEBUG("sent: OPEN %s %d\n", path, mode);
 
-    EQNULL(fspipe_file = fspipe_file_open_local(path, mode), return -errno)
+    EQNULL(fspipe_file_open_local(path, mode), return -errno)
 
-    fi->fh = (uint64_t) fspipe_file;
     fi->direct_io = 1; // avoid kernel caching
     // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
     fi->nonseekable = 1;
 
     return 0;
-
-    /*
-     * 0. fspipe_file = find_file_by_path(path);
-     * 0. if (fspipe_file == NULL) fspipe_file = fspipe_file_alloc(path);
-     * 0. lock(fspipe_file->mtx);
-     *
-     * 1. lock(socket_write_mtx);
-     * 1. bytes = write(socket, "header_size OPEN path mode", header_size);
-     * 1. unlock(socket_write_mtx);
-     *
-     * 3. if (bytes <= 0) {
-     *      unlock(fspipe_file->mtx);
-     *      return -errno;
-     *    } else if (read mode) {   //da cambiare in fspipe_file_open(fspipe_file, open mode)
-     *      fspipe_file->readers++;
-     *      // if opening in read mode wait until there is at least one writer
-     *      while (fspipe_file->writers == 0) {
-     *          wait(fspipe_file->nowriters);
-     *      }
-     *    } else if (write mode) {
-     *      fspipe_file->writers++;
-     *      //if opening in write mode then wait until there is at least one reader
-     *      while (fspipe_file->readers == 0) {
-     *          wait(fspipe_file->noreaders);
-     *      }
-     *    }
-     *
-     * 4. unlock(fspipe_file->mtx);
-     *    // successful open
-     * 4. fi->fh = fspipe_file;
-     * 4. fi->direct_io = 1; // avoid kernel caching
-     *    // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
-     * 4. fi->nonseekable = 1;
-     * 4. return 0;
-     */
-
-    /*int confirm;
-    size_t size;
-
-    if ((fi->flags & O_ACCMODE) == O_RDONLY) {        // open the file for read access
-        // read what path is requested
-        if (readn(fspipe_socket.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
-        char *other_path = (char*) malloc(sizeof(char)*size);
-        EQNULL(other_path, return -ENOENT)
-        if (readn(fspipe_socket.fd_skt, other_path, sizeof(char) * size) <= 0) {
-            free(other_path);
-            return -ENOENT;
-        }
-        // compare its path with mine and send confirmation
-        confirm = strcmp(path, other_path) == 0 ? 1:0;
-        free(other_path);
-        if (writen(fspipe_socket.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
-        if (!confirm) {
-            return -ENOENT;
-        }
-
-        fi->direct_io = 1; // avoid kernel caching
-        // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
-        fi->nonseekable = 1;
-    } else if ((fi->flags & O_ACCMODE) == O_WRONLY) {  // open the file for write access
-        // send the path requested by the client
-        size = strlen(path);
-        if (writen(fspipe_socket.fd_skt, &size, sizeof(size_t)) <= 0) return -ENOENT;
-        if (writen(fspipe_socket.fd_skt, (void*) path, sizeof(char) * size) <= 0) return -ENOENT;
-
-        // read the confirmation
-        if (readn(fspipe_socket.fd_skt, &confirm, sizeof(int)) <= 0) return -ENOENT;
-
-        if (!confirm) {
-            return -ENOENT;
-        }
-    } else if ((fi->flags & O_ACCMODE) == O_RDWR) {     // open the file for both reading and writing
-        DEBUG("both read and write access not allowed\n");
-        return -EINVAL;
-    } else {
-        return -EINVAL;
-    }
-
-    return 0;*/
 }
 
 
@@ -358,21 +262,17 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
-    struct fspipe_file *fspipe_file = (struct fspipe_file *) fi->fh;
-    int err, mode = fi->flags & O_ACCMODE;
+    int bytes, err, mode = fi->flags & O_ACCMODE;
 
-    MINUS1(fspipe_file_close(fspipe_file, mode), return -errno)
-
-    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
+    MINUS1(fspipe_file_close(path, mode), return -errno)
 
     // send: CLOSE strlen(path) path mode
-    enum socket_message message = CLOSE;
-    MINUS1(writen(fspipe_socket.fd_skt, &message, sizeof(enum socket_message)), return -errno)
-    MINUS1(socket_write_h(fspipe_socket.fd_skt, (void*) path, strlen(path)), return -errno)
-    MINUS1(writen(fspipe_socket.fd_skt, &mode, sizeof(int)), return -errno)
+    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
+    bytes = write_socket_message(fspipe_socket.fd_skt, CLOSE, path, mode);
     PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
+    if (bytes <= 0) return -errno;
 
-    DEBUG("sent: %d %s %d\n", message, path, mode);
+    DEBUG("sent: CLOSE %s %d\n", path, mode);
 
     return 0;
 
@@ -464,7 +364,7 @@ static int establish_socket_connection(int is_server) {
 }
 
 int main(int argc, char** argv) {
-    int ret;
+    int ret, err;
     struct dispatcher *dispatcher;
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
@@ -474,24 +374,32 @@ int main(int argc, char** argv) {
         perror("failed to parse command line options");
         return EXIT_FAILURE;
     } else if (ret == 1) {
+        fspipe_opt_free(&args);
         return EXIT_SUCCESS;
     }
 
-    MINUS1(establish_socket_connection(fspipe_options.is_server), perror("unable to establish socket communication"); fuse_opt_free_args(&args); return EXIT_FAILURE)
-
+    MINUS1(establish_socket_connection(fspipe_options.is_server), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    MINUS1(fspipe_open_files_table_init(), perror("failed to create file table"); fspipe_opt_free(&args); return EXIT_FAILURE)
     /* Run dispatcher */
-    EQNULL(dispatcher = fspipe_dispatcher_run(&fspipe_socket), perror("failed to run dispatcher"); fuse_opt_free_args(&args); return EXIT_FAILURE)
+    EQNULL(dispatcher = fspipe_dispatcher_run(&fspipe_socket), perror("failed to run dispatcher"); fspipe_opt_free(&args); return EXIT_FAILURE)
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
     DEBUG("fspipe running on local port %d and remote host %s:%d\n", fspipe_options.port, fspipe_options.host, fspipe_options.remote_port);
     ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
-    if (ret == 1) perror("fuse_main()");
+    if (ret == EXIT_FAILURE) perror("fuse_main()");
 
     DEBUG("%s\n", "cleanup");
-    fuse_opt_free_args(&args);
+    fspipe_opt_free(&args);
     MINUS1(fspipe_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
     MINUS1(fspipe_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
     fspipe_dispatcher_free(dispatcher);
+    MINUS1(fspipe_open_files_table_destroy(), perror("failed to destroy file table"))
+    if (fspipe_socket.fd_server != -1) {
+        MINUS1(close(fspipe_socket.fd_server), perror("failed to close fd_server"))
+        MINUS1(socket_destroy(), perror("failed to destroy the socket file"))
+    }
+    if (fspipe_socket.fd_skt != -1) MINUS1(close(fspipe_socket.fd_skt), perror("failed to close fd_skt"))
 
+    PTH(err, pthread_mutex_destroy(&(fspipe_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
     return ret;
 }
