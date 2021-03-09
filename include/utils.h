@@ -75,4 +75,15 @@
  */
 int msleep(int milliseconds);
 
+/**
+ * Parses the given ip address ipstr which is represented in dot notation and as a string and converts it into an
+ * array.
+ *
+ * @param ipstr ip address in dot notation
+ * @param pointer to the array used to give the conversion result
+ *
+ * @return 0 on success, -1 if the ip address is not a valid address
+ */
+int ipv4_address_to_array(const char *ipstr, int *res);
+
 #endif //UTILS_H
