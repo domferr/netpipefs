@@ -12,13 +12,12 @@
  * Command line options
  */
 struct fspipe_options {
-    const char *host;
+    char *host;
     int port;
     int remote_port;
     int show_help;
     int debug;
     long timeout;
-    int is_server;
 };
 
 extern struct fspipe_options fspipe_options;

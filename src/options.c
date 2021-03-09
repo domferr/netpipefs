@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define FSPIPE_OPT(t, p, v) { t, offsetof(struct fspipe_options, p), v }
 
@@ -19,7 +20,6 @@ static const struct fuse_opt fspipe_opts[] = {
         FSPIPE_OPT("--help",            show_help, 1),
         FSPIPE_OPT("-d",                debug, 1),
         FSPIPE_OPT("debug",             debug, 1),
-        FSPIPE_OPT("--server",          is_server, 1),
 
         FUSE_OPT_END
 };
@@ -38,10 +38,20 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     if (fspipe_options.show_help) {
         fspipe_usage(progname);
         return 1;
-    } else if (fspipe_options.host == NULL) {
+    }
+
+    int array[4];
+    if (fspipe_options.host == NULL) { // host is missing
         fprintf(stderr, "missing host\nsee '%s -h' for usage\n", progname);
         return 1;
-    } else if (fspipe_options.remote_port == -1) {
+    } else if (strcmp(fspipe_options.host, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
+        fspipe_options.host = strcpy(fspipe_options.host, "127.0.0.1\0");
+    } else if (ipv4_address_to_array(fspipe_options.host, array) == -1) { // validate host ip address
+        fprintf(stderr, "invalid host\nsee '%s -h' for usage\n", progname);
+        return 1;
+    }
+
+    if (fspipe_options.remote_port == -1) {
         fprintf(stderr, "missing remote port\nsee '%s -h' for usage\n", progname);
         return 1;
     }

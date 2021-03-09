@@ -6,23 +6,26 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/scfiles.h"
 
-static struct sockaddr_un socket_get_address(void) {
+static struct sockaddr_un socket_get_address(int port) {
     struct sockaddr_un sa;
-    strncpy(sa.sun_path, SOCKNAME, UNIX_PATH_MAX);
+    char sockname[UNIX_PATH_MAX];
+    sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
+    strncpy(sa.sun_path, sockname, UNIX_PATH_MAX);
     sa.sun_family = AF_UNIX;
     return sa;
 }
 
-int socket_listen(void) {
-    struct sockaddr_un sa = socket_get_address();
+int socket_listen(int port) {
+    struct sockaddr_un sa = socket_get_address(port);
     int fd_skt;
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
-    MINUS1(bind(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), return -1)    //TODO should the socket be close on error?
-    MINUS1(listen(fd_skt, SOMAXCONN), return -1)
+    MINUS1(bind(fd_skt, (struct sockaddr *) &sa, sizeof(sa)), close(fd_skt); return -1)
+    MINUS1(listen(fd_skt, SOMAXCONN), close(fd_skt); return -1)
 
     return fd_skt;
 }
@@ -48,17 +51,17 @@ int socket_accept(int fd_skt, long timeout) {
     return fd_client;
 }
 
-int socket_connect(long timeout) {
+int socket_connect(int port, long timeout) {
     ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
     int fd_skt, flags, res;
-    struct sockaddr_un sa = socket_get_address();
+    struct sockaddr_un sa = socket_get_address(port);
 
     MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
 
     // get socket flags
     ISNEGATIVE(flags = fcntl(fd_skt, F_GETFL, NULL), close(fd_skt); return -1)
     // set socket to non-blocking
-    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), close(fd_skt); return -1);
+    ISNEGATIVE(fcntl(fd_skt, F_SETFL, flags | O_NONBLOCK), close(fd_skt); return -1)
 
     // try to connect
     while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
@@ -114,6 +117,27 @@ int socket_connect(long timeout) {
     return fd_skt;
 }
 
+int socket_connect_interval(int fd_skt, int port, long timeout) {
+    struct sockaddr_un sa = socket_get_address(port);
+    int res;
+    while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
+        if (errno == ENOENT && timeout > 0) {
+            long sleeptime = timeout < CONNECT_INTERVAL ? timeout:CONNECT_INTERVAL;
+            MINUS1(msleep(sleeptime), close(fd_skt); return -1)
+            timeout = timeout - sleeptime;
+        } else {
+            break;
+        }
+    }
+
+    if (timeout == 0) {
+        errno = ETIMEDOUT;
+        return -1;
+    }
+
+    return res;
+}
+
 int socket_write_h(int fd_skt, void *data, size_t size) {
     int bytes = writen(fd_skt, &size, sizeof(size_t));
     if (bytes > 0)
@@ -141,8 +165,22 @@ int socket_read_h(int fd_skt, void **ptr) {
     return bytes;
 }
 
-int socket_destroy(void) {
-    return unlink(SOCKNAME);
+int socket_destroy(int fd, int port) {
+    char sockname[UNIX_PATH_MAX];
+    close(fd);
+    sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
+    return unlink(sockname);
+}
+
+int write_socket_message(int fd_skt, enum socket_message message, const char *path, int mode) {
+    int bytes = writen(fd_skt, &message, sizeof(enum socket_message));
+    if (bytes <= 0) return bytes;
+
+    bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));
+    if (bytes <= 0) return bytes;
+
+    if (mode != -1) bytes = writen(fd_skt, &mode, sizeof(int));
+    return bytes;
 }
 
 int socket_read_t(int fd, void *buf, size_t size, long timeout) {
@@ -159,15 +197,4 @@ int socket_read_t(int fd, void *buf, size_t size, long timeout) {
         return -1;
     }
     return readn(fd, buf, size);
-}
-
-int write_socket_message(int fd_skt, enum socket_message message, const char *path, int mode) {
-    int bytes = writen(fd_skt, &message, sizeof(enum socket_message));
-    if (bytes <= 0) return bytes;
-
-    bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));
-    if (bytes <= 0) return bytes;
-
-    if (mode != -1) bytes = writen(fd_skt, &mode, sizeof(int));
-    return bytes;
 }

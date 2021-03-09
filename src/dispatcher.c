@@ -21,7 +21,7 @@ static int read_socket_message(struct fspipe_socket *fspipe_socket, enum socket_
 }
 
 static void *fspipe_dispatcher_fun(void *args) {
-    int bytes = 1, err, run = 1;
+    int bytes = 1, err, run = 1, nfds;
     struct dispatcher *dispatcher = (struct dispatcher *) args;
     struct fspipe_socket *fspipe_socket = dispatcher->fspipe_socket;
     DEBUG("%s\n", "dispatcher - running");
@@ -30,10 +30,11 @@ static void *fspipe_dispatcher_fun(void *args) {
     FD_ZERO(&set);
     FD_SET(fspipe_socket->fd_skt, &set);
     FD_SET(dispatcher->pipefd[0], &set);
+    nfds = fspipe_socket->fd_skt > dispatcher->pipefd[0] ? fspipe_socket->fd_skt:dispatcher->pipefd[0];
 
     while(run) {
         rd_set = set;
-        err = select(dispatcher->pipefd[0]+1, &rd_set, NULL, NULL, NULL);
+        err = select(nfds+1, &rd_set, NULL, NULL, NULL);
         if (err == -1) { // an error occurred then stop running
             perror("dispatcher - select() failed");
             run = 0;

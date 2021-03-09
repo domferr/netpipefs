@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/socket.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/scfiles.h"
@@ -346,21 +347,74 @@ static const struct fuse_operations fspipe_oper = {
     .readdir = readdir_callback
 };
 
-static int establish_socket_connection(int is_server) {
-    //TODO handle error cases
-    int err;
-    fspipe_socket.fd_server   = -1;
-    fspipe_socket.fd_skt      = -1;
+static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondport) {
+    int firstaddr[4], secondaddr[4];
 
-    if (is_server) {
-        MINUS1(fspipe_socket.fd_server = socket_listen(), return -1)
-        MINUS1(fspipe_socket.fd_skt = socket_accept(fspipe_socket.fd_server, fspipe_options.timeout), close(fspipe_socket.fd_server); return -1)
-    } else {
-        MINUS1(fspipe_socket.fd_skt = socket_connect(fspipe_options.timeout), return -1)
+    ipv4_address_to_array(firsthost, firstaddr);
+    ipv4_address_to_array(secondhost, secondaddr);
+
+    for (int i = 0;  i<4; i++) {
+        if (firstaddr[i] != secondaddr[i]) return firstaddr[i] - secondaddr[i];
     }
 
-    PTH(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return -1)
+    return firstport - secondport;
+}
+
+static int establish_socket_connection(int local_port, int remote_port, char *host, long timeout) {
+    int err, fd_server, fd_accepted, fd_skt;
+    char *host_received = NULL;
+    size_t host_len = strlen(host);
+    if (host_len == 0) return -1;
+
+    MINUS1(fd_server = socket_listen(local_port), return -1)
+    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), socket_destroy(fd_server, local_port); return -1)
+
+    // try to connect
+    MINUS1(socket_connect_interval(fd_skt, remote_port, timeout), close(fd_skt); socket_destroy(fd_server, local_port); return -1)
+
+    // try to accept
+    MINUS1(fd_accepted = socket_accept(fd_server, timeout), goto error)
+
+    // send host
+    err = socket_write_h(fd_skt, (void*) host, sizeof(char)*(1+host_len));
+    if (err <= 0) {
+        goto error;
+    }
+
+    // read other host
+    err = socket_read_h(fd_accepted, (void**) &host_received);
+    if (err <= 0) {
+        goto error;
+    }
+
+    // compare the hosts
+    int comparison = hostcmp(host, local_port, host_received, remote_port);
+    if (comparison > 0) {
+        MINUS1(close(fd_skt), goto error)
+        // not needed to accept other connections anymore
+        MINUS1(close(fd_server), goto error)
+        fspipe_socket.fd_skt = fd_accepted;
+        fspipe_socket.port  = local_port;
+    } else if (comparison < 0) {
+        // not needed to accept other connections anymore
+        MINUS1(close(fd_accepted), goto error)
+        MINUS1(socket_destroy(fd_server, local_port), goto error)
+        fspipe_socket.fd_skt = fd_skt;
+        fspipe_socket.port  = -1;
+    } else {
+        errno = EINVAL;
+        goto error;
+    }
+
+    free(host_received);
     return 0;
+
+error:
+    if (fd_accepted != -1) close(fd_accepted);
+    socket_destroy(fd_server, local_port);
+    socket_destroy(fd_skt, remote_port);
+    if (host_received) free(host_received);
+    return -1;
 }
 
 int main(int argc, char** argv) {
@@ -378,13 +432,15 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    MINUS1(establish_socket_connection(fspipe_options.is_server), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    PTHERR(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return EXIT_FAILURE)
+    MINUS1(establish_socket_connection(fspipe_options.port, fspipe_options.remote_port, fspipe_options.host, fspipe_options.timeout), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
+
     MINUS1(fspipe_open_files_table_init(), perror("failed to create file table"); fspipe_opt_free(&args); return EXIT_FAILURE)
+
     /* Run dispatcher */
     EQNULL(dispatcher = fspipe_dispatcher_run(&fspipe_socket), perror("failed to run dispatcher"); fspipe_opt_free(&args); return EXIT_FAILURE)
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
-    DEBUG("fspipe running on local port %d and remote host %s:%d\n", fspipe_options.port, fspipe_options.host, fspipe_options.remote_port);
     ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
     if (ret == EXIT_FAILURE) perror("fuse_main()");
 
@@ -394,11 +450,8 @@ int main(int argc, char** argv) {
     MINUS1(fspipe_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
     fspipe_dispatcher_free(dispatcher);
     MINUS1(fspipe_open_files_table_destroy(), perror("failed to destroy file table"))
-    if (fspipe_socket.fd_server != -1) {
-        MINUS1(close(fspipe_socket.fd_server), perror("failed to close fd_server"))
-        MINUS1(socket_destroy(), perror("failed to destroy the socket file"))
-    }
-    if (fspipe_socket.fd_skt != -1) MINUS1(close(fspipe_socket.fd_skt), perror("failed to close fd_skt"))
+    if (fspipe_socket.port != -1)
+    MINUS1(socket_destroy(fspipe_socket.fd_skt, fspipe_socket.port), perror("failed to close socket connection"))
 
     PTH(err, pthread_mutex_destroy(&(fspipe_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
     return ret;

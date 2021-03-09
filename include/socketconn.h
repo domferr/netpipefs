@@ -5,11 +5,11 @@
 #define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define CONNECT_INTERVAL 1000    // Ogni quanti millisecondi riprovare la connect se fallisce
 #define UNIX_PATH_MAX 108
-#define SOCKNAME "/tmp/sockfile.sock"
+#define BASESOCKNAME "/tmp/sockfile"
 
 struct fspipe_socket {
-    int fd_server;  // used to accept socket connections
     int fd_skt;     // used to communicate via sockets
+    int port;       // port used for this connection
     pthread_mutex_t writesktmtx;
 };
 
@@ -24,7 +24,7 @@ enum socket_message {
  *
  * @return file descriptor del socket creato, -1 in caso di errore e imposta errno
  */
-int socket_listen(void);
+int socket_listen(int port);
 
 /**
  * Accetta una connessione sul socket passato per argomento. Ritorna il file descriptor del client che ha accettato
@@ -47,9 +47,9 @@ int socket_accept(int fd_skt, long timeout);
  * tempo di default DEFAULT_TIMEOUT
  * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
  */
-int socket_connect(long timeout);
+int socket_connect(int port, long timeout);
 
-/**
+/** TODO change this doc
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
  * integer che rappresenta la dimensione in bytes dei dati.
  *
@@ -70,6 +70,17 @@ int socket_write_h(int fd_skt, void *data, size_t size);
 int socket_read_h(int fd_skt, void **ptr);
 
 /**
+ * Unlink the file used for the socket communication
+ *
+ * @return 0 on success, -1 otherwise and errno is set
+ */
+int socket_destroy(int fd, int port);
+
+int write_socket_message(int fd_skt, enum socket_message message, const char *path, int mode);
+
+int socket_connect_interval(int fd_skt, int port, long timeout);
+
+/**
  * Legge dal socket il numero di bytes indicati. Se la lettura si blocca per più di timeout millisecondi, ritorna -1
  * e imposta errno a ETIMEDOUT.
  *
@@ -80,12 +91,5 @@ int socket_read_h(int fd_skt, void **ptr);
  * ed imposta errno a ETIMEDOUT.
  */
 int socket_read_t(int fd, void *buf, size_t size, long timeout);
-
-/**
- * Unlink the file used for the socket communication
- *
- * @return 0 on success, -1 otherwise and errno is set
- */
-int socket_destroy(void);
 
 #endif //SOCKETCONN_H
