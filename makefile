@@ -50,7 +50,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(INCDIR)/%.h
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-$(OBJDIR)/%.test.o: $(TSTDIR)/%.test.c
+$(OBJDIR)/%.test.o: $(TSTDIR)/%.test.c $(TSTDIR)/testutilities.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 $(BINDIR)/fspipe: $(OBJS_FSPIPE)
