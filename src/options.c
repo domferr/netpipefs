@@ -54,6 +54,14 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     if (fspipe_options.remote_port == -1) {
         fprintf(stderr, "missing remote port\nsee '%s -h' for usage\n", progname);
         return 1;
+    } else if (fspipe_options.remote_port < 0) {
+        fprintf(stderr, "invalid remote port\nsee '%s -h' for usage\n", progname);
+        return 1;
+    }
+
+    if (fspipe_options.port < 0) {
+        fprintf(stderr, "invalid port\nsee '%s -h' for usage\n", progname);
+        return 1;
     }
 
     if (fspipe_options.debug) {
@@ -78,7 +86,8 @@ void fspipe_usage(const char *progname) {
            "    --port=<d>             local port used for the socket connection (default: %d)\n"
            "    --host=<s>             remote host address to which connect to\n"
            "    --remote_port=<d>      remote port used for the socket connection\n"
-           "\n", DEFAULT_PORT);
+           "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
+           "\n", DEFAULT_PORT, DEFAULT_TIMEOUT);
     fuse_usage();
 }
 
