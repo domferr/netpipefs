@@ -3,11 +3,15 @@
 #include <errno.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include "../include/fspipe_file.h"
 #include "../include/utils.h"
 #include "../include/icl_hash.h"
+#include "../include/scfiles.h"
 
-#define NBUCKETS 128 // number of buckets used for the files hash table
+#define READ_END 0
+#define WRITE_END 1
+#define NBUCKETS 128 // number of buckets used for the open files hash table
 
 static icl_hash_t *open_files_table = NULL; // hash table with all the open files. Each file has its path as key
 static pthread_mutex_t open_files_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -41,6 +45,8 @@ static struct fspipe_file *fspipe_file_alloc(const char *path) {
     file->writers = 0;
     file->readers = 0;
     file->remote_error = 0;
+    file->pipefd[READ_END] = -1;
+    file->pipefd[WRITE_END] = -1;
 
     return file;
 }
@@ -110,7 +116,7 @@ static struct fspipe_file *fspipe_add_file(const char *path) {
  *
  * @return the file structure or NULL if it doesn't exist
  */
-static struct fspipe_file *fspipe_get_file(const char *path) {
+static struct fspipe_file *fspipe_get_open_file(const char *path) {
     int err;
     struct fspipe_file *file;
 
@@ -162,8 +168,7 @@ struct fspipe_file *fspipe_file_open_local(const char *path, int mode) {
         return NULL;
     }
 
-    if ((file = fspipe_get_file(path)) == NULL) {
-        fprintf(stderr, "%s creato\n", path);
+    if ((file = fspipe_get_open_file(path)) == NULL) {
         // file doesn't exist then create it
         EQNULL(file = fspipe_add_file(path), return NULL)
         just_created = 1;
@@ -173,7 +178,9 @@ struct fspipe_file *fspipe_file_open_local(const char *path, int mode) {
 
     // wait until there is at least one reader and one writer or an error occurs
     while (file->remote_error == 0 && (file->writers == 0 || file->readers == 0)) {
+        fprintf(stderr, "LET'S SLEEP | %s\n", path);
         PTH(err, pthread_cond_wait(&(file->canopen), &(file->mtx)), fspipe_file_unlock(file); goto end)
+        fprintf(stderr, "WOKE UP     | %s\n", path);
     }
 
     // if an error occurred remotely then reset the error flag and set errno
@@ -199,13 +206,13 @@ struct fspipe_file *fspipe_file_open_remote(const char *path, int mode, int erro
     int failure, just_created = 0;
     struct fspipe_file *file = NULL;
 
-    if ((file = fspipe_get_file(path)) == NULL) {
+    if ((file = fspipe_get_open_file(path)) == NULL) {
         // file doesn't exist then create it
         EQNULL(file = fspipe_add_file(path), return NULL)
         just_created = 1;
     }
 
-    NOTZERO(fspipe_file_lock(file), failure = -1; goto end)
+    NOTZERO(fspipe_file_lock(file), failure = 1; goto end)
 
     if (error) file->remote_error = error;
     else if (mode == O_RDONLY) file->readers++;
@@ -213,7 +220,7 @@ struct fspipe_file *fspipe_file_open_remote(const char *path, int mode, int erro
 
     if ((failure = pthread_cond_broadcast(&(file->canopen))) != 0) errno = failure;
 
-    NOTZERO(fspipe_file_unlock(file), failure = -1)
+    NOTZERO(fspipe_file_unlock(file), failure = 1)
 
 end:
     if (!failure) return file;
@@ -227,24 +234,46 @@ end:
 
 int fspipe_file_close(const char *path, int mode) {
     int free_memory = 0;
-    struct fspipe_file *file = fspipe_get_file(path);
+    struct fspipe_file *file = fspipe_get_open_file(path);
     if (file == NULL) return -1;
 
     NOTZERO(fspipe_file_lock(file), return -1)
 
     if (mode == O_WRONLY) {
         file->writers--;
-        // TODO if (fspipe_file->writers == 0) { close(fspipe_file->fd[WRITE_END]); fd[WRITE_END] = -1; }
     } else if (mode == O_RDONLY) {
         file->readers--;
-        // TODO if (fspipe_file->readers == 0) { close(fspipe_file->fd[READ_END]); fd[READ_END] = -1; }
     }
     if (file->readers == 0 && file->writers == 0) {
         fspipe_remove_file((void*) file->path);
+        if (file->pipefd[READ_END] != -1) {
+            close(file->pipefd[READ_END]);
+            file->pipefd[READ_END] = -1;
+        }
+
+        if (file->pipefd[WRITE_END] != -1) {
+            close(file->pipefd[WRITE_END]);
+            file->pipefd[WRITE_END] = -1;
+        }
+
         free_memory = 1;
     }
     NOTZERO(fspipe_file_unlock(file), return -1)
     if (free_memory) fspipe_file_free(file);
 
     return 0;
+}
+
+int fspipe_file_write(const char *path, char *buf, size_t size) {
+    struct fspipe_file *file = fspipe_get_open_file(path);
+    if (file == NULL) return 0; // file is not open!
+
+    return writen(file->pipefd[WRITE_END], buf, size);    // TODO handle concurrent writes
+}
+
+int fspipe_file_read(const char *path, char *buf, size_t size) {
+    struct fspipe_file *file = fspipe_get_open_file(path);
+    if (file == NULL) return 0; // file is not open!
+
+    return readn(file->pipefd[READ_END], buf, size);    // TODO handle concurrent reads
 }

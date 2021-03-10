@@ -138,8 +138,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     EQNULL(fspipe_file_open_local(path, mode), return -errno)
 
     fi->direct_io = 1; // avoid kernel caching
-    // seeking, or calling pread(2) or pwrite(2) with a nonzero position is not supported on sockets. (from man 7 socket)
-    fi->nonseekable = 1;
+    fi->nonseekable = 1; // seeking will not be allowed
 
     return 0;
 }
@@ -171,6 +170,18 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //TODO se tutti gli scrittori hanno chiuso il file, allora ritornare 0 (EOF)
+    int err, bytes;
+
+    MINUS1(bytes = fspipe_file_read(path, buf, size), return -errno)
+    if (bytes == 0) return 0; // EOF because there are no writers
+
+    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
+    bytes = write_socket_message(fspipe_socket.fd_skt, READ, path, size);
+    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
+    if (bytes <= 0) return -errno;
+
+    DEBUG("sent: READ %s %ld\n", path, size);
+
     /*
      * 0. fspipe_file = fi->fh;
      *
@@ -276,29 +287,6 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     DEBUG("sent: CLOSE %s %d\n", path, mode);
 
     return 0;
-
-    /*
-     * 0. fspipe_file = fi->fh;
-     *
-     * 1. lock(fspipe_file->mtx);
-     *
-     *    // cambiare in fspipe_file_close(fspipe_file, mode);
-     * 1. if (read mode) {
-     *      fspipe_file->readers--;
-     *      if (fspipe_file->readers == 0) close(fspipe_file->fd[READ_END]);
-     *    } else if (write mode) {
-     *      fspipe_file->writers--;
-     *      if (fspipe_file->writers == 0) close(fspipe_file->fd[WRITE_END]);
-     *    }
-     *
-     * 1. unlock(fspipe_file->mtx);
-     *
-     * 2. lock(socket_write_mtx);
-     * 2. sent = write(socket, "header_size CLOSE path mode", header_size);
-     * 2. unlock(socket_write_mtx);
-     */
-
-    return 0;
 }
 
 /** Change the size of a file
@@ -347,13 +335,17 @@ static const struct fuse_operations fspipe_oper = {
     .readdir = readdir_callback
 };
 
+/**
+ * Compares the given ip addresses and returns 1 or 0 or -1 if the first is greater or equal or less than the second.
+ * If the two ip addresses are equal then returns 1 or 0 or -1 if firstport greater or equal or less than secondport.
+ */
 static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondport) {
     int firstaddr[4], secondaddr[4];
 
-    ipv4_address_to_array(firsthost, firstaddr);
-    ipv4_address_to_array(secondhost, secondaddr);
+    MINUS1(ipv4_address_to_array(firsthost, firstaddr), return 0)
+    MINUS1(ipv4_address_to_array(secondhost, secondaddr), return 0)
 
-    for (int i = 0;  i<4; i++) {
+    for (int i = 0; i < 4; i++) {
         if (firstaddr[i] != secondaddr[i]) return firstaddr[i] - secondaddr[i];
     }
 
@@ -377,15 +369,11 @@ static int establish_socket_connection(int local_port, int remote_port, char *ho
 
     // send host
     err = socket_write_h(fd_skt, (void*) host, sizeof(char)*(1+host_len));
-    if (err <= 0) {
-        goto error;
-    }
+    if (err <= 0) goto error;
 
     // read other host
     err = socket_read_h(fd_accepted, (void**) &host_received);
-    if (err <= 0) {
-        goto error;
-    }
+    if (err <= 0) goto error;
 
     // compare the hosts
     int comparison = hostcmp(host, local_port, host_received, remote_port);
@@ -432,9 +420,11 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
+    /* Connect via sockets */
     PTHERR(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return EXIT_FAILURE)
     MINUS1(establish_socket_connection(fspipe_options.port, fspipe_options.remote_port, fspipe_options.host, fspipe_options.timeout), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
 
+    /* Create open files table */
     MINUS1(fspipe_open_files_table_init(), perror("failed to create file table"); fspipe_opt_free(&args); return EXIT_FAILURE)
 
     /* Run dispatcher */
@@ -446,13 +436,18 @@ int main(int argc, char** argv) {
 
     DEBUG("%s\n", "cleanup");
     fspipe_opt_free(&args);
+    /* Stop and join dispatcher thread */
     MINUS1(fspipe_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
     MINUS1(fspipe_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
     fspipe_dispatcher_free(dispatcher);
+
+    /* Destroy open files table */
     MINUS1(fspipe_open_files_table_destroy(), perror("failed to destroy file table"))
+
+    /* Destroy socket and socket's mutex */
     if (fspipe_socket.port != -1)
     MINUS1(socket_destroy(fspipe_socket.fd_skt, fspipe_socket.port), perror("failed to close socket connection"))
-
     PTH(err, pthread_mutex_destroy(&(fspipe_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
+
     return ret;
 }
