@@ -32,7 +32,7 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     fspipe_options.remote_port = -1;
 
     /* Parse options */
-    MINUS1ERR(fuse_opt_parse(args, &fspipe_options, fspipe_opts, NULL), return -1)
+    MINUS1(fuse_opt_parse(args, &fspipe_options, fspipe_opts, NULL), return -1)
 
     /* When --help is specified, first print usage text, then exit with success */
     if (fspipe_options.show_help) {

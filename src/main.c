@@ -10,37 +10,15 @@
 #include <sys/socket.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
-#include "../include/scfiles.h"
 #include "../include/dispatcher.h"
 #include "../include/options.h"
 #include "../include/fspipe_file.h"
+#include "../include/openfiles.h"
 
 /* Command line options */
 struct fspipe_options fspipe_options;
 
 struct fspipe_socket fspipe_socket;
-
-/**
- * Initialize filesystem
- *
- * The return value will passed in the `private_data` field of
- * `struct fuse_context` to all file operations, and as a
- * parameter to the destroy() method. It overrides the initial
- * value provided to fuse_main() / fuse_new().
- */
-// Undocumented but extraordinarily useful fact:  the fuse_context is
-// set up before this function is called, and
-// fuse_get_context()->private_data returns the user_data passed to
-// fuse_main().  Really seems like either it should be a third
-// parameter coming in here, or else the fact should be documented
-// (and this might as well return void, as it did in older versions of
-// FUSE).
-/*static void* init_callback(struct fuse_conn_info *conn)
-{
-    DEBUG("init() callback\n")
-
-    return 0;
-}*/
 
 /**
  * Clean up filesystem
@@ -121,22 +99,18 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
-    int bytes, err, mode = fi->flags & O_ACCMODE;
+    int mode = fi->flags & O_ACCMODE;
+    struct fspipe_file *file = NULL;
 
     if (mode == O_RDWR) {     // open the file for both reading and writing
         DEBUG("both read and write access is not allowed\n");
         return -EINVAL;
     }
 
-    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
-    bytes = write_socket_message(fspipe_socket.fd_skt, OPEN, path, mode);
-    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
-    if (bytes <= 0) return -errno;
+    file = fspipe_file_open_local(path, mode);
+    if (file == NULL) return -errno;
 
-    DEBUG("sent: OPEN %s %d\n", path, mode);
-
-    EQNULL(fspipe_file_open_local(path, mode), return -errno)
-
+    fi->fh = (uint64_t) file;
     fi->direct_io = 1; // avoid kernel caching
     fi->nonseekable = 1; // seeking will not be allowed
 
@@ -169,45 +143,11 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    //TODO se tutti gli scrittori hanno chiuso il file, allora ritornare 0 (EOF)
-    int err, bytes;
+    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
 
-    MINUS1(bytes = fspipe_file_read(path, buf, size), return -errno)
-    if (bytes == 0) return 0; // EOF because there are no writers
-
-    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
-    bytes = write_socket_message(fspipe_socket.fd_skt, READ, path, size);
-    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
-    if (bytes <= 0) return -errno;
-
-    DEBUG("sent: READ %s %ld\n", path, size);
-
-    /*
-     * 0. fspipe_file = fi->fh;
-     *
-     *    //da cambiare in fspipe_file_read(fspipe_file, buf, size);
-     * 1. bytes = readn(fspipe_file->fd[READ_END], size);
-     *
-     * 2. lock(fspipe_file->mtx);
-     * 2. fspipe_file->size -= bytes;
-     * 2. unlock(fspipe_file->mtx);
-     * 2. if (bytes == 0) return -errno;
-     *
-     * 3. lock(socket_write_mtx);
-     * 3. sent = write(socket, "header_size READ path bytes", header_size);
-     * 3. unlock(socket_write_mtx);
-     *
-     * 4. return bytes;
-     */
-    ssize_t bytes_read = readn(fspipe_socket.fd_skt, buf, size);
-    if (bytes_read == -1) {
-        if (errno == EPIPE) {
-            DEBUG("connection closed on the other side\n");
-            return 0;   // return EOF
-        }
-        return -errno;
-    }
-    return bytes_read; // return >= 0
+    int bytes = fspipe_file_read_local(file, path, buf, size);
+    if (bytes == -1) return -errno;
+    return bytes;
 }
 
 /** Write data to an open file
@@ -220,45 +160,11 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    //TODO se tutti i lettori hanno chiuso il file, allora ritornare errore EPIPE
-    /*
-     * 0. fspipe_file = fi->fh;
-     * 0. lock(fspipe_file->mtx);
-     *    // se tutti i lettori hanno chiuso il file, allora ritornare errore EPIPE
-     * 0. if (fspipe_file->readers == 0) unlock(fspipe_file->mtx); return -EPIPE;
-     *
-     *    // aspetta che l'altro abbia abbastanza spazio
-     * 1. while(fspipe_file->size + size > fspipe_file->capacity) {
-     *      wait(fspipe_file->nospace);
-     *    }
-     *
-     *    // invia i dati tramite socket
-     * 2. lock(socket_write_mtx);
-     * 2. bytes = write(socket, "header_size WRITE path size", header_size);
-     * 2. if (bytes > 0) bytes = write(socket, buf, size);
-     * 2. unlock(socket_write_mtx);
-     *
-     *    // questo dovrebbe succedere solo se l'altro ha risposto "scritto con successo"
-     * 3. if (bytes > 0) {
-     *      fspipe_file->size += bytes;
-     *    } else {
-     *      unlock(fspipe_file->mtx);
-     *      return -errno;
-     *    }
-     *
-     * 3. unlock(fspipe_file->mtx);
-     * 3. return bytes;
-     */
-    ssize_t bytes_wrote = writen(fspipe_socket.fd_skt, (void*) buf, size);
-    if (bytes_wrote == -1) {
-        if (errno == EPIPE) {
-            DEBUG("connection closed on the other side\n");
-            return 0;
-        }
-        return -errno;
-    }
+    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
 
-    return bytes_wrote;
+    int bytes = fspipe_file_write_remote(file, path, (void *) buf, size);
+    if (bytes == -1) return -errno;
+    return bytes;
 }
 
 /** Release an open file
@@ -274,19 +180,12 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
-    int bytes, err, mode = fi->flags & O_ACCMODE;
+    int mode = fi->flags & O_ACCMODE;
+    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
 
-    MINUS1(fspipe_file_close(path, mode), return -errno)
-
-    // send: CLOSE strlen(path) path mode
-    PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), return -errno)
-    bytes = write_socket_message(fspipe_socket.fd_skt, CLOSE, path, mode);
-    PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), return -errno)
-    if (bytes <= 0) return -errno;
-
-    DEBUG("sent: CLOSE %s %d\n", path, mode);
-
-    return 0;
+    int ret = fspipe_file_close_local(file, mode);
+    if (ret == -1) return -errno;
+    return 0; //ignored
 }
 
 /** Change the size of a file
@@ -411,11 +310,8 @@ int main(int argc, char** argv) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
     /* Parse options */
-    ret = fspipe_opt_parse(argv[0], &args);
-    if (ret == -1) {
-        perror("failed to parse command line options");
-        return EXIT_FAILURE;
-    } else if (ret == 1) {
+    MINUS1(ret = fspipe_opt_parse(argv[0], &args), fspipe_opt_free(&args); return EXIT_FAILURE)
+    if (ret == 1) {
         fspipe_opt_free(&args);
         return EXIT_SUCCESS;
     }

@@ -23,11 +23,12 @@ OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
 				$(OBJDIR)/fspipe_file.o	\
+				$(OBJDIR)/openfiles.o	\
 				$(OBJDIR)/icl_hash.o	\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/fspipe
-TESTS	= $(BINDIR)/utils.test
+TESTS	= $(BINDIR)/utils.test $(BINDIR)/openfiles.test
 
 .PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage checkmount unmount
 
@@ -57,6 +58,9 @@ $(BINDIR)/fspipe: $(OBJS_FSPIPE)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BINDIR)/%.test: $(OBJDIR)/%.test.o $(OBJDIR)/%.o
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/fspipe_file.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/socketconn.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:
