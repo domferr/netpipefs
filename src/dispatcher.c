@@ -11,13 +11,70 @@
 #include "../include/scfiles.h"
 #include "../include/socketconn.h"
 #include "../include/fspipe_file.h"
+#include "../include/openfiles.h"
 
-static int read_socket_message(struct fspipe_socket *fspipe_socket, enum socket_message *message, char **path) {
-    int bytes = readn(fspipe_socket->fd_skt, message, sizeof(enum socket_message));
+static int read_socket_message(struct fspipe_socket *fspipe_socket, enum fspipe_message *message, char **path) {
+    int bytes = readn(fspipe_socket->fd_skt, message, sizeof(enum fspipe_message));
     if (bytes > 0)
         return socket_read_h(fspipe_socket->fd_skt, (void**) path);
 
+    return bytes; // <= 0
+}
+
+static int on_open(struct fspipe_socket *fspipe_socket, char *path) {
+    int bytes, mode;
+
+    bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
+    if (bytes <= 0) return bytes;
+
+    DEBUG("remote: OPEN %s %d\n", path, mode);
+    EQNULL(fspipe_file_open_remote(path, mode), return -1)
+
+    return 1; // > 0
+}
+
+static int on_close(struct fspipe_socket *fspipe_socket, char *path) {
+    int bytes, mode;
+    bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
+    if (bytes <= 0) return bytes;
+
+    DEBUG("remote: CLOSE %s %d\n", path, mode);
+    MINUS1(fspipe_file_close_remote(path, mode), return -1)
+
+    return bytes; // > 0
+}
+
+static int on_write(struct fspipe_socket *fspipe_socket, char *path) {
+    int bytes;
+    char *buf = NULL;
+    bytes = socket_read_h(fspipe_socket->fd_skt, (void**) &buf);
+    if (bytes <= 0) return bytes;
+    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
+
+    bytes = fspipe_file_write_local(path, buf, bytes);
+    free(buf);
+    if (bytes <= 0) {
+        if (errno == EPIPE) {
+            DEBUG("on write broken pipe\n");
+            return 1;
+        }
+        return -1;
+    }
+
     return bytes;
+}
+
+static int on_read(struct fspipe_socket *fspipe_socket, char *path) {
+    int bytes, read;
+    read = readn(fspipe_socket->fd_skt, &bytes, sizeof(int));
+    if (read <= 0) return read;
+
+    DEBUG("remote: READ %s %d bytes\n", path, bytes);
+
+    bytes = fspipe_file_read_remote(path, bytes);
+    if (bytes <= 0) return -1;
+
+    return read;
 }
 
 static void *fspipe_dispatcher_fun(void *args) {
@@ -41,45 +98,27 @@ static void *fspipe_dispatcher_fun(void *args) {
         } else if (FD_ISSET(dispatcher->pipefd[0], &rd_set)) {  // pipe can be read then stop running
             run = 0;
         } else {    // can read from socket
-            enum socket_message message;
+            enum fspipe_message message;
             char *path = NULL;
-            int mode, remote_error = 0;
             if ((bytes = read_socket_message(fspipe_socket, &message, &path)) == -1) {
                 perror("dispatcher - failed to read socket message");
             } else if (bytes > 0) {
                 switch (message) {
                     case OPEN:
-                        bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
-                        if (bytes > 0) {
-                            DEBUG("remote: OPEN %s %d\n", path, mode);
-                            EQNULL(fspipe_file_open_remote(path, mode, 0), remote_error = errno; run = 0; break)
-
-                            // send: OPEN_CONFIRM path mode remote_error
-                            PTH(err, pthread_mutex_lock(&(fspipe_socket->writesktmtx)), run = 0; break)
-                            bytes = write_socket_message(fspipe_socket->fd_skt, OPEN_CONFIRM, path, mode);
-                            if (bytes > 0) {
-                                bytes = writen(fspipe_socket->fd_skt, &remote_error, sizeof(int));
-                            }
-                            PTH(err, pthread_mutex_unlock(&(fspipe_socket->writesktmtx)), run = 0)
-                            if (bytes > 0) DEBUG("sent: OPEN_CONFIRM %s %d %d\n", path, mode, remote_error);
-                        }
-                        break;
-                    case OPEN_CONFIRM:
-                        bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
-                        if (bytes <= 0) break;
-
-                        bytes = readn(fspipe_socket->fd_skt, &remote_error, sizeof(int));
-                        if (bytes > 0) {
-                            DEBUG("remote: OPEN_CONFIRM %s %d %d\n", path, mode, remote_error);
-                            EQNULLERR(fspipe_file_open_remote(path, mode, remote_error), run = 0)
-                        }
+                        bytes = on_open(fspipe_socket, path);
+                        if (bytes == -1) perror("on_open");
                         break;
                     case CLOSE:
-                        bytes = readn(fspipe_socket->fd_skt, &mode, sizeof(int));
-                        if (bytes > 0) {
-                            DEBUG("remote: CLOSE %s %d\n", path, mode);
-                            MINUS1ERR(fspipe_file_close(path, mode), run = 0)
-                        }
+                        bytes = on_close(fspipe_socket, path);
+                        if (bytes == -1) perror("on_close");
+                        break;
+                    case WRITE:
+                        bytes = on_write(fspipe_socket, path);
+                        if (bytes == -1) perror("on_write");
+                        break;
+                    case READ:
+                        bytes = on_read(fspipe_socket, path);
+                        if (bytes == -1) perror("on_read");
                         break;
                     default:
                         break;

@@ -13,10 +13,11 @@ struct fspipe_socket {
     pthread_mutex_t writesktmtx;
 };
 
-enum socket_message {
+enum fspipe_message {
     OPEN = 100,
-    OPEN_CONFIRM,
-    CLOSE
+    CLOSE,
+    READ,
+    WRITE
 };
 
 /**
@@ -42,14 +43,13 @@ int socket_accept(int fd_skt, long timeout);
  * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
  * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
  *
- *
  * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
  * tempo di default DEFAULT_TIMEOUT
  * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
  */
 int socket_connect(int port, long timeout);
 
-/** TODO change this doc
+/**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
  * integer che rappresenta la dimensione in bytes dei dati.
  *
@@ -57,15 +57,17 @@ int socket_connect(int port, long timeout);
  * @param data dati da inviare
  * @param size quanti bytes inviare
  *
- * @return 0 in caso di successo, -1 altrimenti ed imposta errno
+ * @return numero di bytes scritti in caso di successo, -1 altrimenti ed imposta errno, 0 se il socket è stato chiudo
  */
 int socket_write_h(int fd_skt, void *data, size_t size);
 
-/**TODO change this doc
- * Legge dal socket i dati attraverso il file descriptor fornito e li ritorna al chiamante.
+/**
+ * Legge dal socket i dati attraverso il file descriptor fornito, allocando abbastanza memoria. ptr punterà all'aria di
+ * memoria allocata ed il chiamante deve occuparsi di liberarla quando non gli serve più per evitare memory leaks.
  *
  * @param fd_skt file descriptor sul quale scrivere i dati
- * @return i dati letti in caso di successo, NULL altrimenti ed imposta errno
+ * @param ptr puntatore all'area di memoria allocata che contiene i dati letti
+ * @return numero di bytes letti in caso di successo, -1 altrimenti ed imposta errno oppure 0 se il socket è chiuso
  */
 int socket_read_h(int fd_skt, void **ptr);
 
@@ -76,7 +78,7 @@ int socket_read_h(int fd_skt, void **ptr);
  */
 int socket_destroy(int fd, int port);
 
-int write_socket_message(int fd_skt, enum socket_message message, const char *path, int mode);
+int write_socket_message(int fd_skt, enum fspipe_message message, const char *path, int mode);
 
 int socket_connect_interval(int fd_skt, int port, long timeout);
 
