@@ -16,7 +16,7 @@ static pthread_mutex_t open_files_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 int fspipe_open_files_table_init(void) {
     // destroys the table if it already exists
-    if (open_files_table) MINUS1(fspipe_open_files_table_destroy(), return -1)
+    if (open_files_table != NULL) MINUS1(fspipe_open_files_table_destroy(), return -1)
 
     open_files_table = icl_hash_create(NBUCKETS, NULL, NULL);
     if (open_files_table == NULL) return -1;
@@ -38,11 +38,15 @@ int fspipe_open_files_table_destroy(void) {
  *
  * @return 0 on success, -1 on error
  */
-int fspipe_remove_open_file(const char *path) {
+static int fspipe_remove_open_file(const char *path) {
     int deleted, err;
     PTH(err, pthread_mutex_lock(&open_files_mtx), return -1)
 
-    deleted = icl_hash_delete(open_files_table, (char*) path, NULL, NULL);
+    if (open_files_table == NULL) {
+        errno = EPERM;
+    } else {
+        deleted = icl_hash_delete(open_files_table, (char *) path, NULL, NULL);
+    }
 
     PTH(err, pthread_mutex_unlock(&open_files_mtx), return -1)
     return deleted;
@@ -57,11 +61,15 @@ int fspipe_remove_open_file(const char *path) {
  */
 static struct fspipe_file *fspipe_get_open_file(const char *path) {
     int err;
-    struct fspipe_file *file;
+    struct fspipe_file *file = NULL;
 
     PTH(err, pthread_mutex_lock(&open_files_mtx), return NULL)
 
-    file = icl_hash_find(open_files_table, (char*) path);
+    if (open_files_table == NULL) {
+        errno = EPERM;
+    } else {
+        file = icl_hash_find(open_files_table, (char *) path);
+    }
 
     PTH(err, pthread_mutex_unlock(&open_files_mtx), return NULL)
 
@@ -81,6 +89,11 @@ static struct fspipe_file *fspipe_get_or_create_open_file(const char *path, int 
     *just_created = 0;
 
     PTH(err, pthread_mutex_lock(&open_files_mtx), return NULL)
+    if (open_files_table == NULL) {
+        errno = EPERM;
+        pthread_mutex_unlock(&open_files_mtx);
+        return NULL;
+    }
 
     file = icl_hash_find(open_files_table, (char*) path);
     EQNULL(file, file = fspipe_file_alloc(path); *just_created = 1)
@@ -213,7 +226,7 @@ int fspipe_file_close_local(struct fspipe_file *file, int mode) {
 
     if (err == -1) return -1;
 
-    return bytes;
+    return bytes; // > 0
 }
 
 int fspipe_file_close_remote(const char *path, int mode) {
