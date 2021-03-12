@@ -2,7 +2,17 @@
 #include "../include/utils.h"
 #include "testutilities.h"
 
+static void test_ipv4_address_to_array(void);
+
 int main(int argc, char** argv) {
+
+    test_ipv4_address_to_array();
+    testpassed("Convert ipv4 address into integer array");
+
+    return 0;
+}
+
+static void test_ipv4_address_to_array(void) {
     int array[4];
 
     /* Simple case 192.168.1.8 */
@@ -70,7 +80,4 @@ int main(int argc, char** argv) {
 
     /* Last number is more than 255 */
     test(ipv4_address_to_array("55.168.1.478", array) == -1)
-
-    testpassed("ipv4_address_to_array()");
-    return 0;
 }
