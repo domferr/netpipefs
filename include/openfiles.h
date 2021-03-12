@@ -15,7 +15,7 @@ int fspipe_file_write_local(const char *path, char *buf, size_t size);
 
 int fspipe_file_write_remote(struct fspipe_file *file, const char *path, char *buf, size_t size);
 
-int fspipe_file_read_local(struct fspipe_file *file, const char *path, char *buf, size_t size);
+int fspipe_file_read_local(struct fspipe_file *file, char *buf, size_t size);
 
 int fspipe_file_read_remote(const char* path, size_t size);
 

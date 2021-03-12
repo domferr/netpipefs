@@ -333,7 +333,7 @@ int fspipe_file_write_remote(struct fspipe_file *file, const char *path, char *b
     return bytes;
 }
 
-int fspipe_file_read_local(struct fspipe_file *file, const char *path, char *buf, size_t size) {
+int fspipe_file_read_local(struct fspipe_file *file, char *buf, size_t size) {
     int err, bytes, bytes_wrote;
     char *bufptr = buf;
 
@@ -363,14 +363,15 @@ int fspipe_file_read_local(struct fspipe_file *file, const char *path, char *buf
     PTH(err, pthread_cond_broadcast(&(file->isfull)), fspipe_file_unlock(file); return -1)
 
     PTH(err, pthread_mutex_lock(&(fspipe_socket.writesktmtx)), fspipe_file_unlock(file); return -1)
-    bytes_wrote = write_socket_message(fspipe_socket.fd_skt, READ, path, bytes);
+    bytes_wrote = write_socket_message(fspipe_socket.fd_skt, READ, file->path, bytes);
     PTH(err, pthread_mutex_unlock(&(fspipe_socket.writesktmtx)), fspipe_file_unlock(file); return -1)
-    if (bytes_wrote > 0) DEBUGFILE(file);
+    if (bytes_wrote > 0) {
+        DEBUG("sent: READ %s %d\n", file->path, bytes);
+        DEBUGFILE(file);
+    }
 
     NOTZERO(fspipe_file_unlock(file), return -1)
     if (bytes_wrote <= 0) return -1;
-
-    DEBUG("sent: READ %s %d\n", path, bytes);
 
     return bytes;
 }

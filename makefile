@@ -30,7 +30,7 @@ OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
 TARGETS	= $(BINDIR)/fspipe
 TESTS	= $(BINDIR)/utils.test $(BINDIR)/openfiles.test
 
-.PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage checkmount unmount
+.PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage run_test checkmount unmount
 
 all: $(BINDIR) $(OBJDIR) $(INCDIR) $(TARGETS)
 
@@ -77,20 +77,24 @@ PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 
 mount_prod: all
-	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
 
 mount_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
 
 debug_prod: all
-	$(BINDIR)/fspipe --port=$(PROD_PORT) --host=$(CONS_HOST) --remote_port=$(CONS_PORT) --timeout=6000 -o debug -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
 
 debug_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --host=$(PROD_HOST) --remote_port=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/fspipe --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
 
 # run with help flag
 usage: all
 	$(BINDIR)/fspipe -h
+
+# run the test suite
+run_test: test
+	@$(foreach src, $(TESTS), $(src); )
 
 checkmount:
 	mount | grep fspipe

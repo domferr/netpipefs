@@ -12,14 +12,15 @@
  * FSPipe's option descriptor array
  */
 static const struct fuse_opt fspipe_opts[] = {
-        FSPIPE_OPT("--host=%s",         host, 0),
         FSPIPE_OPT("--port=%d",         port, 0),
-        FSPIPE_OPT("--remote_port=%d",  remote_port, 0),
+        FSPIPE_OPT("--hostip=%s",       hostip, 0),
+        FSPIPE_OPT("--hostport=%d",     hostport, 0),
         FSPIPE_OPT("--timeout=%d",      timeout, 0),
         FSPIPE_OPT("-h",                show_help, 1),
         FSPIPE_OPT("--help",            show_help, 1),
         FSPIPE_OPT("-d",                debug, 1),
         FSPIPE_OPT("debug",             debug, 1),
+        FSPIPE_OPT("--debug",           debug, 1),
 
         FUSE_OPT_END
 };
@@ -27,9 +28,9 @@ static const struct fuse_opt fspipe_opts[] = {
 int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     /* Set defaults */
     fspipe_options.timeout = DEFAULT_TIMEOUT;
-    fspipe_options.host = NULL;
     fspipe_options.port = DEFAULT_PORT;
-    fspipe_options.remote_port = -1;
+    fspipe_options.hostip = NULL;
+    fspipe_options.hostport = DEFAULT_PORT;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &fspipe_options, fspipe_opts, NULL), return -1)
@@ -41,21 +42,18 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
     }
 
     int array[4];
-    if (fspipe_options.host == NULL) { // host is missing
-        fprintf(stderr, "missing host\nsee '%s -h' for usage\n", progname);
+    if (fspipe_options.hostip == NULL) { // host ip is missing
+        fprintf(stderr, "missing host ip address\nsee '%s -h' for usage\n", progname);
         return 1;
-    } else if (strcmp(fspipe_options.host, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
-        fspipe_options.host = strcpy(fspipe_options.host, "127.0.0.1\0");
-    } else if (ipv4_address_to_array(fspipe_options.host, array) == -1) { // validate host ip address
-        fprintf(stderr, "invalid host\nsee '%s -h' for usage\n", progname);
+    } else if (strcmp(fspipe_options.hostip, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
+        fspipe_options.hostip = strcpy(fspipe_options.hostip, "127.0.0.1\0");
+    } else if (ipv4_address_to_array(fspipe_options.hostip, array) == -1) { // validate host ip address
+        fprintf(stderr, "invalid host ip address\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
-    if (fspipe_options.remote_port == -1) {
-        fprintf(stderr, "missing remote port\nsee '%s -h' for usage\n", progname);
-        return 1;
-    } else if (fspipe_options.remote_port < 0) {
-        fprintf(stderr, "invalid remote port\nsee '%s -h' for usage\n", progname);
+    if (fspipe_options.hostport < 0) {
+        fprintf(stderr, "invalid host port\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
@@ -72,7 +70,7 @@ int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
 }
 
 void fspipe_opt_free(struct fuse_args *args) {
-    if (fspipe_options.host) free((void*) fspipe_options.host);
+    if (fspipe_options.hostip) free((void*) fspipe_options.hostip);
     fuse_opt_free_args(args);
 }
 
@@ -84,10 +82,10 @@ void fspipe_usage(const char *progname) {
            "\n", progname);
     printf("fspipe options:\n"
            "    --port=<d>             local port used for the socket connection (default: %d)\n"
-           "    --host=<s>             remote host address to which connect to\n"
-           "    --remote_port=<d>      remote port used for the socket connection\n"
+           "    --hostip=<s>           remote host ip address to which connect to\n"
+           "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
-           "\n", DEFAULT_PORT, DEFAULT_TIMEOUT);
+           "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT);
     fuse_usage();
 }
 

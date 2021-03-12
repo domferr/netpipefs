@@ -145,7 +145,7 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     struct fspipe_file *file = (struct fspipe_file *) fi->fh;
 
-    int bytes = fspipe_file_read_local(file, path, buf, size);
+    int bytes = fspipe_file_read_local(file, buf, size);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -318,7 +318,7 @@ int main(int argc, char** argv) {
 
     /* Connect via sockets */
     PTHERR(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return EXIT_FAILURE)
-    MINUS1(establish_socket_connection(fspipe_options.port, fspipe_options.remote_port, fspipe_options.host, fspipe_options.timeout), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    MINUS1(establish_socket_connection(fspipe_options.port, fspipe_options.hostport, fspipe_options.hostip, fspipe_options.timeout), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
 
     /* Create open files table */
     MINUS1(fspipe_open_files_table_init(), perror("failed to create file table"); fspipe_opt_free(&args); return EXIT_FAILURE)
