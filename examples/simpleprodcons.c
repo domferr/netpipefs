@@ -2,6 +2,7 @@
  * Example with one producer and one consumer
  *
  * gcc -Wall examples/simpleprodcons.c src/scfiles.c -o bin/simpleprodcons
+ *
  */
 
 #include <string.h>
@@ -41,9 +42,6 @@ static int producer() {
         next = prec1 + prec2;
         counter++;
     }
-    next = -1;
-    ISNEGATIVEERR(writen(fd, &next, sizeof(int)), return EXIT_FAILURE)
-    printf("-1 into %s\n", PRODUCER_FILEPATH);
 
     // Close
     MINUS1ERR(close(fd), return EXIT_FAILURE);
