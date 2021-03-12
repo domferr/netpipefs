@@ -53,25 +53,25 @@
         }
 
 /**
- * Conversione da millisecondi a secondi
+ * Convert milliseconds to seconds
  */
 #define MS_TO_SEC(ms) ((ms)/1000L)
 
 /**
- * Quanti microsecondi ci sono nei millisecondi specificati
+ * Convert milliseconds to macroseconds
  */
 #define MS_TO_USEC(ms) (((ms) % 1000L) * 1000L)
 
 /**
- * Quanti nanosecondi ci sono nei millisecondi specificati
+ * Convert milliseconds to nanoseconds
  */
 #define MS_TO_NANOSEC(ms) (((ms)%1000L)*1000000L)
 
 /**
- * Mette il thread in attesa per un tempo pari ai millisecondi specificati.
+ * Sleep for the given milliseconds
  *
- * @param milliseconds quanti millisecondi attendere
- * @return 0 in caso di successo, -1 altrimenti
+ * @param milliseconds how many milliseconds to wait
+ * @return 0 on success, -1 otherwise
  */
 int msleep(int milliseconds);
 

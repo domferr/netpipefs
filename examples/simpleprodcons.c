@@ -1,6 +1,10 @@
 /*
- * Example with one producer and one consumer
+ * Example with one producer and one consumer. The producer writes MAXNUMBERS numbers
+ * into PRODUCER_FILEPATH. The consumer reads from CONSUMER_FILEPATH an array of
+ * MAXNUMBERS numbers. Both producer and consumer write/read to a file with the same
+ * name but the directory is different so the files are not exactly the same.
  *
+ * Run the following command to build this example
  * gcc -Wall examples/simpleprodcons.c src/scfiles.c -o bin/simpleprodcons
  *
  */
@@ -42,6 +46,7 @@ static int producer() {
         next = prec1 + prec2;
         counter++;
     }
+    printf("\n");
 
     // Close
     MINUS1ERR(close(fd), return EXIT_FAILURE);

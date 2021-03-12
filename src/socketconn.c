@@ -172,8 +172,8 @@ int socket_destroy(int fd, int port) {
     return unlink(sockname);
 }
 
-int write_socket_message(int fd_skt, enum fspipe_message message, const char *path, int mode) {
-    int bytes = writen(fd_skt, &message, sizeof(enum fspipe_message));
+int write_socket_message(int fd_skt, enum netpipefs_message message, const char *path, int mode) {
+    int bytes = writen(fd_skt, &message, sizeof(enum netpipefs_message));
     if (bytes <= 0) return bytes;
 
     bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));

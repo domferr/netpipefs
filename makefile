@@ -16,18 +16,18 @@ INCLUDES 	= -I $(INCDIR)
 LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # richiesto da FUSE
 LIBS		= -lpthread
 
-# dependencies for fspipe executable
-OBJS_FSPIPE	=	$(OBJDIR)/main.o		\
+# dependencies for netpipefs executable
+OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/socketconn.o	\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
-				$(OBJDIR)/fspipe_file.o	\
+				$(OBJDIR)/netpipefs_file.o	\
 				$(OBJDIR)/openfiles.o	\
 				$(OBJDIR)/icl_hash.o	\
 				$(OBJDIR)/utils.o
 
-TARGETS	= $(BINDIR)/fspipe
+TARGETS	= $(BINDIR)/netpipefs
 TESTS	= $(BINDIR)/utils.test $(BINDIR)/openfiles.test
 
 .PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage run_test checkmount unmount
@@ -54,13 +54,13 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 $(OBJDIR)/%.test.o: $(TSTDIR)/%.test.c $(TSTDIR)/testutilities.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-$(BINDIR)/fspipe: $(OBJS_FSPIPE)
+$(BINDIR)/netpipefs: $(OBJS_NETPIPEFS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BINDIR)/%.test: $(OBJDIR)/%.test.o $(OBJDIR)/%.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/fspipe_file.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/socketconn.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
+$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/netpipefs_file.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/socketconn.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:
@@ -77,27 +77,27 @@ PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 
 mount_prod: all
-	$(BINDIR)/fspipe --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/netpipefs --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
 
 mount_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
 
 debug_prod: all
-	$(BINDIR)/fspipe --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/netpipefs --port=$(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
 
 debug_cons: all
-	$(BINDIR)/fspipe --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
 
 # run with help flag
 usage: all
-	$(BINDIR)/fspipe -h
+	$(BINDIR)/netpipefs -h
 
 # run the test suite
 run_test: test
 	@$(foreach src, $(TESTS), $(src); )
 
 checkmount:
-	mount | grep fspipe
+	mount | grep netpipefs
 
 unmount:
 	fusermount -u $(PROD_MOUNTPOINT)

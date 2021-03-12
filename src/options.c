@@ -6,81 +6,81 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FSPIPE_OPT(t, p, v) { t, offsetof(struct fspipe_options, p), v }
+#define NETPIPEFS_OPT(t, p, v) { t, offsetof(struct netpipefs_options, p), v }
 
 /**
- * FSPipe's option descriptor array
+ * netpipefs's option descriptor array
  */
-static const struct fuse_opt fspipe_opts[] = {
-        FSPIPE_OPT("--port=%d",         port, 0),
-        FSPIPE_OPT("--hostip=%s",       hostip, 0),
-        FSPIPE_OPT("--hostport=%d",     hostport, 0),
-        FSPIPE_OPT("--timeout=%d",      timeout, 0),
-        FSPIPE_OPT("-h",                show_help, 1),
-        FSPIPE_OPT("--help",            show_help, 1),
-        FSPIPE_OPT("-d",                debug, 1),
-        FSPIPE_OPT("debug",             debug, 1),
-        FSPIPE_OPT("--debug",           debug, 1),
+static const struct fuse_opt netpipefs_opts[] = {
+        NETPIPEFS_OPT("--port=%d",         port, 0),
+        NETPIPEFS_OPT("--hostip=%s",       hostip, 0),
+        NETPIPEFS_OPT("--hostport=%d",     hostport, 0),
+        NETPIPEFS_OPT("--timeout=%d",      timeout, 0),
+        NETPIPEFS_OPT("-h",                show_help, 1),
+        NETPIPEFS_OPT("--help",            show_help, 1),
+        NETPIPEFS_OPT("-d",                debug, 1),
+        NETPIPEFS_OPT("debug",             debug, 1),
+        NETPIPEFS_OPT("--debug",           debug, 1),
 
         FUSE_OPT_END
 };
 
-int fspipe_opt_parse(const char *progname, struct fuse_args *args) {
+int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     /* Set defaults */
-    fspipe_options.timeout = DEFAULT_TIMEOUT;
-    fspipe_options.port = DEFAULT_PORT;
-    fspipe_options.hostip = NULL;
-    fspipe_options.hostport = DEFAULT_PORT;
+    netpipefs_options.timeout = DEFAULT_TIMEOUT;
+    netpipefs_options.port = DEFAULT_PORT;
+    netpipefs_options.hostip = NULL;
+    netpipefs_options.hostport = DEFAULT_PORT;
 
     /* Parse options */
-    MINUS1(fuse_opt_parse(args, &fspipe_options, fspipe_opts, NULL), return -1)
+    MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
 
     /* When --help is specified, first print usage text, then exit with success */
-    if (fspipe_options.show_help) {
-        fspipe_usage(progname);
+    if (netpipefs_options.show_help) {
+        netpipefs_usage(progname);
         return 1;
     }
 
     int array[4];
-    if (fspipe_options.hostip == NULL) { // host ip is missing
+    if (netpipefs_options.hostip == NULL) { // host ip is missing
         fprintf(stderr, "missing host ip address\nsee '%s -h' for usage\n", progname);
         return 1;
-    } else if (strcmp(fspipe_options.hostip, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
-        fspipe_options.hostip = strcpy(fspipe_options.hostip, "127.0.0.1\0");
-    } else if (ipv4_address_to_array(fspipe_options.hostip, array) == -1) { // validate host ip address
+    } else if (strcmp(netpipefs_options.hostip, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
+        netpipefs_options.hostip = strcpy(netpipefs_options.hostip, "127.0.0.1\0");
+    } else if (ipv4_address_to_array(netpipefs_options.hostip, array) == -1) { // validate host ip address
         fprintf(stderr, "invalid host ip address\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
-    if (fspipe_options.hostport < 0) {
+    if (netpipefs_options.hostport < 0) {
         fprintf(stderr, "invalid host port\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
-    if (fspipe_options.port < 0) {
+    if (netpipefs_options.port < 0) {
         fprintf(stderr, "invalid port\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
-    if (fspipe_options.debug) {
+    if (netpipefs_options.debug) {
         MINUS1ERR(fuse_opt_add_arg(args, "-d"),  return -1)
     }
 
     return 0;
 }
 
-void fspipe_opt_free(struct fuse_args *args) {
-    if (fspipe_options.hostip) free((void*) fspipe_options.hostip);
+void netpipefs_opt_free(struct fuse_args *args) {
+    if (netpipefs_options.hostip) free((void*) netpipefs_options.hostip);
     fuse_opt_free_args(args);
 }
 
-/** Prints FUSE's usage without the "fspipe_usage: ..." line */
+/** Prints FUSE's usage without the "netpipefs_usage: ..." line */
 static void fuse_usage(void);
 
-void fspipe_usage(const char *progname) {
+void netpipefs_usage(const char *progname) {
     printf("usage: %s [options] <mountpoint>\n"
            "\n", progname);
-    printf("fspipe options:\n"
+    printf("netpipefs options:\n"
            "    --port=<d>             local port used for the socket connection (default: %d)\n"
            "    --hostip=<s>           remote host ip address to which connect to\n"
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"

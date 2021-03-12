@@ -3,17 +3,17 @@
 
 #define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
-#define CONNECT_INTERVAL 1000    // Ogni quanti millisecondi riprovare la connect se fallisce
+#define CONNECT_INTERVAL 1000   // Ogni quanti millisecondi riprovare la connect se fallisce
 #define UNIX_PATH_MAX 108
 #define BASESOCKNAME "/tmp/sockfile"
 
-struct fspipe_socket {
+struct netpipefs_socket {
     int fd_skt;     // used to communicate via sockets
     int port;       // port used for this connection
     pthread_mutex_t writesktmtx;
 };
 
-enum fspipe_message {
+enum netpipefs_message {
     OPEN = 100,
     CLOSE,
     READ,
@@ -78,7 +78,7 @@ int socket_read_h(int fd_skt, void **ptr);
  */
 int socket_destroy(int fd, int port);
 
-int write_socket_message(int fd_skt, enum fspipe_message message, const char *path, int mode);
+int write_socket_message(int fd_skt, enum netpipefs_message message, const char *path, int mode);
 
 int socket_connect_interval(int fd_skt, int port, long timeout);
 

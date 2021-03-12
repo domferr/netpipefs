@@ -12,13 +12,13 @@
 #include "../include/socketconn.h"
 #include "../include/dispatcher.h"
 #include "../include/options.h"
-#include "../include/fspipe_file.h"
+#include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
 
 /* Command line options */
-struct fspipe_options fspipe_options;
-
-struct fspipe_socket fspipe_socket;
+struct netpipefs_options netpipefs_options;
+/* Socket communication */
+struct netpipefs_socket netpipefs_socket;
 
 /**
  * Clean up filesystem
@@ -100,14 +100,14 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
-    struct fspipe_file *file = NULL;
+    struct netpipefs_file *file = NULL;
 
     if (mode == O_RDWR) {     // open the file for both reading and writing
         DEBUG("both read and write access is not allowed\n");
         return -EINVAL;
     }
 
-    file = fspipe_file_open_local(path, mode);
+    file = netpipefs_file_open_local(path, mode);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
@@ -143,9 +143,9 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
+    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int bytes = fspipe_file_read_local(file, buf, size);
+    int bytes = netpipefs_file_read_local(file, buf, size);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -160,9 +160,9 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
+    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int bytes = fspipe_file_write_remote(file, path, (void *) buf, size);
+    int bytes = netpipefs_file_write_remote(file, path, (void *) buf, size);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -181,22 +181,14 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
-    struct fspipe_file *file = (struct fspipe_file *) fi->fh;
+    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int ret = fspipe_file_close_local(file, mode);
+    int ret = netpipefs_file_close_local(file, mode);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
 
-/** Change the size of a file
- *
- * `fi` will always be NULL if the file is not currently open, but
- * may also be NULL if the file is open.
- *
- * Unless FUSE_CAP_HANDLE_KILLPRIV is disabled, this method is
- * expected to reset the setuid and setgid bits.
- *
- */
+/** Change the size of a file */
 static int truncate_callback(const char *path, off_t newsize) {
     return 0;
 }
@@ -222,7 +214,7 @@ static int readdir_callback(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
-static const struct fuse_operations fspipe_oper = {
+static const struct fuse_operations netpipefs_oper = {
     .destroy = destroy_callback,
     .getattr = getattr_callback,
     .open = open_callback,
@@ -235,8 +227,9 @@ static const struct fuse_operations fspipe_oper = {
 };
 
 /**
- * Compares the given ip addresses and returns 1 or 0 or -1 if the first is greater or equal or less than the second.
- * If the two ip addresses are equal then returns 1 or 0 or -1 if firstport greater or equal or less than secondport.
+ * Compares the given ip addresses and returns 1, 0 or -1 if the first is greater or equal or less than the second.
+ * If the two ip addresses are equal then returns 1, 0 or -1 if firstport greater or equal or less than secondport.
+ * If the ip addresses are not valid then 0 is returned.
  */
 static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondport) {
     int firstaddr[4], secondaddr[4];
@@ -280,14 +273,14 @@ static int establish_socket_connection(int local_port, int remote_port, char *ho
         MINUS1(close(fd_skt), goto error)
         // not needed to accept other connections anymore
         MINUS1(close(fd_server), goto error)
-        fspipe_socket.fd_skt = fd_accepted;
-        fspipe_socket.port  = local_port;
+        netpipefs_socket.fd_skt = fd_accepted;
+        netpipefs_socket.port  = local_port;
     } else if (comparison < 0) {
         // not needed to accept other connections anymore
         MINUS1(close(fd_accepted), goto error)
         MINUS1(socket_destroy(fd_server, local_port), goto error)
-        fspipe_socket.fd_skt = fd_skt;
-        fspipe_socket.port  = -1;
+        netpipefs_socket.fd_skt = fd_skt;
+        netpipefs_socket.port  = -1;
     } else {
         errno = EINVAL;
         goto error;
@@ -310,40 +303,42 @@ int main(int argc, char** argv) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
     /* Parse options */
-    MINUS1(ret = fspipe_opt_parse(argv[0], &args), fspipe_opt_free(&args); return EXIT_FAILURE)
+    MINUS1(ret = netpipefs_opt_parse(argv[0], &args), netpipefs_opt_free(&args); return EXIT_FAILURE)
     if (ret == 1) {
-        fspipe_opt_free(&args);
+        netpipefs_opt_free(&args);
         return EXIT_SUCCESS;
     }
 
     /* Connect via sockets */
-    PTHERR(err, pthread_mutex_init(&(fspipe_socket.writesktmtx), NULL), return EXIT_FAILURE)
-    MINUS1(establish_socket_connection(fspipe_options.port, fspipe_options.hostport, fspipe_options.hostip, fspipe_options.timeout), perror("unable to establish socket communication"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writesktmtx), NULL), return EXIT_FAILURE)
+    MINUS1(establish_socket_connection(netpipefs_options.port, netpipefs_options.hostport, netpipefs_options.hostip, netpipefs_options.timeout), perror("unable to establish socket communication"); netpipefs_opt_free(
+            &args); return EXIT_FAILURE)
 
     /* Create open files table */
-    MINUS1(fspipe_open_files_table_init(), perror("failed to create file table"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    MINUS1(netpipefs_open_files_table_init(), perror("failed to create file table"); netpipefs_opt_free(&args); return EXIT_FAILURE)
 
     /* Run dispatcher */
-    EQNULL(dispatcher = fspipe_dispatcher_run(&fspipe_socket), perror("failed to run dispatcher"); fspipe_opt_free(&args); return EXIT_FAILURE)
+    EQNULL(dispatcher = netpipefs_dispatcher_run(&netpipefs_socket), perror("failed to run dispatcher"); netpipefs_opt_free(
+            &args); return EXIT_FAILURE)
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
-    ret = fuse_main(args.argc, args.argv, &fspipe_oper, NULL);
+    ret = fuse_main(args.argc, args.argv, &netpipefs_oper, NULL);
     if (ret == EXIT_FAILURE) perror("fuse_main()");
 
     DEBUG("%s\n", "cleanup");
-    fspipe_opt_free(&args);
+    netpipefs_opt_free(&args);
     /* Stop and join dispatcher thread */
-    MINUS1(fspipe_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
-    MINUS1(fspipe_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
-    fspipe_dispatcher_free(dispatcher);
+    MINUS1(netpipefs_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
+    MINUS1(netpipefs_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
+    netpipefs_dispatcher_free(dispatcher);
 
     /* Destroy open files table */
-    MINUS1(fspipe_open_files_table_destroy(), perror("failed to destroy file table"))
+    MINUS1(netpipefs_open_files_table_destroy(), perror("failed to destroy file table"))
 
     /* Destroy socket and socket's mutex */
-    if (fspipe_socket.port != -1)
-    MINUS1(socket_destroy(fspipe_socket.fd_skt, fspipe_socket.port), perror("failed to close socket connection"))
-    PTH(err, pthread_mutex_destroy(&(fspipe_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
+    if (netpipefs_socket.port != -1)
+    MINUS1(socket_destroy(netpipefs_socket.fd_skt, netpipefs_socket.port), perror("failed to close socket connection"))
+    PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
 
     return ret;
 }

@@ -1,9 +1,9 @@
-/*
+/**
  * Definitions for fuse version, command line options, usage text.
  */
 
-#ifndef FSPIPE_OPTIONS_H
-#define FSPIPE_OPTIONS_H
+#ifndef NETPIPEFS_OPTIONS_H
+#define NETPIPEFS_OPTIONS_H
 
 #define FUSE_USE_VERSION 29 //fuse version 2.9. Needed by fuse.h
 #include <fuse.h>
@@ -11,7 +11,7 @@
 /**
  * Command line options
  */
-struct fspipe_options {
+struct netpipefs_options {
     char *hostip;
     int port;
     int hostport;
@@ -20,19 +20,33 @@ struct fspipe_options {
     long timeout;
 };
 
-extern struct fspipe_options fspipe_options;
+extern struct netpipefs_options netpipefs_options;
 
 #define DEBUG(...)						\
-	do { if (fspipe_options.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
-
-int fspipe_opt_parse(const char *progname, struct fuse_args *args);
-void fspipe_opt_free(struct fuse_args *args);
+	do { if (netpipefs_options.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
 
 /**
- * Prints FSPipe's usage.
+ * Parse netpipefs's options.
+ *
+ * @param progname program's name
+ * @param args it will be filled with the arguments that will be passed to FUSE
+ *
+ * @return
+ */
+int netpipefs_opt_parse(const char *progname, struct fuse_args *args);
+
+/**
+ * Free netpipefs's options.
+ *
+ * @param args arguments passed to FUSE
+ */
+void netpipefs_opt_free(struct fuse_args *args);
+
+/**
+ * Print NetpipeFS's usage.
  *
  * @param progname program name
  */
-void fspipe_usage(const char *progname);
+void netpipefs_usage(const char *progname);
 
-#endif //FSPIPE_OPTIONS_H
+#endif //NETPIPEFS_OPTIONS_H

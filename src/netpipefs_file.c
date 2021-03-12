@@ -3,15 +3,15 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
-#include "../include/fspipe_file.h"
+#include "../include/netpipefs_file.h"
 #include "../include/utils.h"
 
 #define READ_END 0
 #define WRITE_END 1
 
-struct fspipe_file *fspipe_file_alloc(const char *path) {
+struct netpipefs_file *netpipefs_file_alloc(const char *path) {
     int err;
-    struct fspipe_file *file = (struct fspipe_file *) malloc(sizeof(struct fspipe_file));
+    struct netpipefs_file *file = (struct netpipefs_file *) malloc(sizeof(struct netpipefs_file));
     EQNULL(file, return NULL)
 
     EQNULL(file->path = strdup(path), free(file); return NULL)
@@ -50,7 +50,7 @@ struct fspipe_file *fspipe_file_alloc(const char *path) {
     return file;
 }
 
-int fspipe_file_free(struct fspipe_file *file) {
+int netpipefs_file_free(struct netpipefs_file *file) {
     int ret = 0, err;
     if ((err = pthread_mutex_destroy(&(file->mtx))) != 0) { errno = err; ret = -1; }
     if ((err = pthread_cond_destroy(&(file->canopen))) != 0) { errno = err; ret = -1; }
@@ -62,13 +62,13 @@ int fspipe_file_free(struct fspipe_file *file) {
     return ret;
 }
 
-int fspipe_file_lock(struct fspipe_file *file) {
+int netpipefs_file_lock(struct netpipefs_file *file) {
     int err = pthread_mutex_lock(&(file->mtx));
     if (err != 0) errno = err;
     return err;
 }
 
-int fspipe_file_unlock(struct fspipe_file *file) {
+int netpipefs_file_unlock(struct netpipefs_file *file) {
     int err = pthread_mutex_unlock(&(file->mtx));
     if (err != 0) errno = err;
     return err;

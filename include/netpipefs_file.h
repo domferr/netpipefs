@@ -1,11 +1,14 @@
-#ifndef FSPIPE_FILE_H
-#define FSPIPE_FILE_H
+#ifndef NETPIPEFS_FILE_H
+#define NETPIPEFS_FILE_H
 
 #include <pthread.h>
 #include "../include/options.h"
+
+/** Print debug info about the given file */
 #define DEBUGFILE(file) DEBUG("   %s: %d readers, %d writers, %ld bytes\n", file->path, file->readers, file->writers, file->size)
 
-struct fspipe_file {
+/** Structure for a file in netpipefs */
+struct netpipefs_file {
     const char *path;
     int writers;    // number of writers
     int readers;    // number of readers
@@ -24,7 +27,7 @@ struct fspipe_file {
  *
  * @return the created file structure or NULL on error and it sets errno
  */
-struct fspipe_file *fspipe_file_alloc(const char *path);
+struct netpipefs_file *netpipefs_file_alloc(const char *path);
 
 /**
  * Frees the memory allocated for the given file.
@@ -33,7 +36,7 @@ struct fspipe_file *fspipe_file_alloc(const char *path);
  *
  * @return 0 on success, -1 on error and it sets errno
  */
-int fspipe_file_free(struct fspipe_file *file);
+int netpipefs_file_free(struct netpipefs_file *file);
 
 /**
  * Lock the given file
@@ -42,7 +45,7 @@ int fspipe_file_free(struct fspipe_file *file);
  *
  * @return 0 on success, -1 on error and sets errno
  */
-int fspipe_file_lock(struct fspipe_file *file);
+int netpipefs_file_lock(struct netpipefs_file *file);
 
 /**
  * Unlock the given file
@@ -51,6 +54,6 @@ int fspipe_file_lock(struct fspipe_file *file);
  *
  * @return 0 on success, -1 on error and sets errno
  */
-int fspipe_file_unlock(struct fspipe_file *file);
+int netpipefs_file_unlock(struct netpipefs_file *file);
 
-#endif //FSPIPE_FILE_H
+#endif //NETPIPEFS_FILE_H

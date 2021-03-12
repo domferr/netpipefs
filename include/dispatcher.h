@@ -2,17 +2,17 @@
 #define DISPATCHER_H
 
 struct dispatcher {
-    struct fspipe_socket *fspipe_socket;
+    struct netpipefs_socket *netpipefs_socket;
     pthread_t tid;  // dispatcher's thread id
     int pipefd[2];  // used to communicate with main thread
 };
 
-struct dispatcher *fspipe_dispatcher_run(struct fspipe_socket *fspipe_data);
+struct dispatcher *netpipefs_dispatcher_run(struct netpipefs_socket *netpipefs_data);
 
-int fspipe_dispatcher_stop(struct dispatcher *dispatcher);
+int netpipefs_dispatcher_stop(struct dispatcher *dispatcher);
 
-int fspipe_dispatcher_join(struct dispatcher *dispatcher, void *ret);
+int netpipefs_dispatcher_join(struct dispatcher *dispatcher, void *ret);
 
-void fspipe_dispatcher_free(struct dispatcher *dispatcher);
+void netpipefs_dispatcher_free(struct dispatcher *dispatcher);
 
 #endif //DISPATCHER_H
