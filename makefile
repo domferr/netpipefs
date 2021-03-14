@@ -29,7 +29,7 @@ OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/netpipefs
-TESTS	= $(BINDIR)/utils.test $(BINDIR)/cbuf.test
+TESTS	= $(BINDIR)/utils.test $(BINDIR)/cbuf.test $(BINDIR)/openfiles.test
 
 .PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage run_test checkmount unmount
 
@@ -59,6 +59,9 @@ $(BINDIR)/netpipefs: $(OBJS_NETPIPEFS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BINDIR)/%.test: $(OBJDIR)/%.test.o $(OBJDIR)/%.o
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/netpipefs_file.o $(OBJDIR)/cbuf.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/socketconn.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:

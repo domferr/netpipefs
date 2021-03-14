@@ -51,6 +51,7 @@ int netpipefs_remove_open_file(const char *path) {
 
     if (open_files_table == NULL) {
         errno = EPERM;
+        deleted = -1;
     } else {
         deleted = icl_hash_delete(open_files_table, (char *) path, NULL, NULL);
     }
