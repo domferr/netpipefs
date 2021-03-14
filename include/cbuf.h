@@ -21,6 +21,8 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size);
 
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size);
 
+size_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n);
+
 size_t cbuf_size(cbuf_t *cbuf);
 
 size_t cbuf_capacity(cbuf_t *cbuf);

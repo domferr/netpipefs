@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "testutilities.h"
 #include "../include/cbuf.h"
 
@@ -31,6 +32,25 @@ int main(int argc, char** argv) {
 
     /* Free buffer */
     cbuf_free(buffer);
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) return EXIT_FAILURE;
+
+    /* Alloc buffer */
+    buffer = cbuf_alloc(capacity);
+    test(buffer != NULL)
+
+    if (write(pipefd[1], dummydata, capacity - capacity/4) < (ssize_t)(capacity - capacity/4)) return EXIT_FAILURE;
+
+    /* Put into buffer from pipe */
+    test(cbuf_readn(pipefd[0], buffer, capacity - capacity/4) == (capacity - capacity/4))
+    test(cbuf_size(buffer) == capacity - capacity/4)
+    test(cbuf_get(buffer, datagot, capacity/3) == capacity/3)
+
+    if (write(pipefd[1], dummydata, capacity/3 + capacity/4) < (ssize_t)(capacity/3 + capacity/4)) return EXIT_FAILURE;
+    test(cbuf_readn(pipefd[0], buffer, capacity/3 + capacity/4) == (capacity/3 + capacity/4))
+    printf("%ld\n", cbuf_size(buffer));
+    test(cbuf_size(buffer) == capacity)
 
     testpassed("Circular buffer");
 

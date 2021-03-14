@@ -39,7 +39,7 @@ static void test_uninitialized_table(void) {
 
     /* Get or create if missing */
     int just_created = 0;
-    test(netpipefs_get_or_create_open_file(path, 10, &just_created) == NULL)
+    test(netpipefs_get_or_create_open_file(path, &just_created) == NULL)
     test(errno == EPERM)
     errno = 0;
 }
@@ -59,7 +59,7 @@ static void test_openfiles_table(void) {
 
     /* Get or create if missing */
     int just_created = 0;
-    test((file = netpipefs_get_or_create_open_file(path, 10, &just_created)) != NULL)
+    test((file = netpipefs_get_or_create_open_file(path, &just_created)) != NULL)
     test(just_created == 1)
 
     /* Get open file */

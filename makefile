@@ -87,7 +87,7 @@ debug_prod: all
 	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
 
 debug_cons: all
-	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -d -s $(CONS_MOUNTPOINT)
+	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=4096 -d -s $(CONS_MOUNTPOINT)
 
 # run with help flag
 usage: all
