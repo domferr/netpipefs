@@ -12,12 +12,13 @@
  * Command line options
  */
 struct netpipefs_options {
-    char *hostip;
-    int port;
-    int hostport;
     int show_help;
     int debug;
     long timeout;
+    size_t pipecapacity;
+    int port;
+    char *hostip;
+    int hostport;
 };
 
 extern struct netpipefs_options netpipefs_options;

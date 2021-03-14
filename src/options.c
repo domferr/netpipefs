@@ -1,6 +1,7 @@
 #include "../include/options.h"
 #include "../include/socketconn.h"
 #include "../include/utils.h"
+#include "../include/netpipefs_file.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,15 +13,16 @@
  * netpipefs's option descriptor array
  */
 static const struct fuse_opt netpipefs_opts[] = {
-        NETPIPEFS_OPT("--port=%d",         port, 0),
-        NETPIPEFS_OPT("--hostip=%s",       hostip, 0),
-        NETPIPEFS_OPT("--hostport=%d",     hostport, 0),
-        NETPIPEFS_OPT("--timeout=%d",      timeout, 0),
-        NETPIPEFS_OPT("-h",                show_help, 1),
-        NETPIPEFS_OPT("--help",            show_help, 1),
-        NETPIPEFS_OPT("-d",                debug, 1),
-        NETPIPEFS_OPT("debug",             debug, 1),
-        NETPIPEFS_OPT("--debug",           debug, 1),
+        NETPIPEFS_OPT("--port=%i",          port, 0),
+        NETPIPEFS_OPT("-p %i",              port, 0),
+        NETPIPEFS_OPT("--hostip=%s",        hostip, 0),
+        NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
+        NETPIPEFS_OPT("--timeout=%i",       timeout, 0),
+        NETPIPEFS_OPT("-h",                 show_help, 1),
+        NETPIPEFS_OPT("--help",             show_help, 1),
+        NETPIPEFS_OPT("-d",                 debug, 1),
+        NETPIPEFS_OPT("--debug",            debug, 1),
+        NETPIPEFS_OPT("--pipecapacity=%i",  pipecapacity, 0),
 
         FUSE_OPT_END
 };
@@ -31,6 +33,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     netpipefs_options.port = DEFAULT_PORT;
     netpipefs_options.hostip = NULL;
     netpipefs_options.hostport = DEFAULT_PORT;
+    netpipefs_options.pipecapacity = DEFAULT_FILE_CAPACITY;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
@@ -41,6 +44,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         return 1;
     }
 
+    /* Validate host ip address */
     int array[4];
     if (netpipefs_options.hostip == NULL) { // host ip is missing
         fprintf(stderr, "missing host ip address\nsee '%s -h' for usage\n", progname);
@@ -52,16 +56,24 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         return 1;
     }
 
+    /* Check host port */
     if (netpipefs_options.hostport < 0) {
         fprintf(stderr, "invalid host port\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
+    /* Check local port */
     if (netpipefs_options.port < 0) {
         fprintf(stderr, "invalid port\nsee '%s -h' for usage\n", progname);
         return 1;
     }
 
+    if (netpipefs_options.pipecapacity <= 0) {
+        fprintf(stderr, "invalid pipe capacity\nsee '%s -h' for usage\n", progname);
+        return 1;
+    }
+
+    /* Check for debug flag */
     if (netpipefs_options.debug) {
         MINUS1ERR(fuse_opt_add_arg(args, "-d"),  return -1)
     }
@@ -85,7 +97,8 @@ void netpipefs_usage(const char *progname) {
            "    --hostip=<s>           remote host ip address to which connect to\n"
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
-           "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT);
+           "    --netpipecapacity=<d>  max network pipe capacity (default: %d)\n"
+           "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT, DEFAULT_FILE_CAPACITY);
     fuse_usage();
 }
 

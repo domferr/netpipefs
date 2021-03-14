@@ -36,10 +36,11 @@ To run the test suite first build the tests by running ``make test`` and finally
 | ---- | ---- |
 | `-h, --help` | Print help and exit |
 | `-d, --debug` | Print debugging information |
-| `--port=PORT` | Port used for network communication |
+| `-p PORT, --port=PORT` | Port used for network communication |
 | `--hostip=IP` | Host IP address |
 | `--hostport=PORT` | Port used by host |
 | `--timeout=MILLISECONDS` | Connection timeout. Expressed in milliseconds |
+| `--pipecapaciy=CAPACITY` | Maximum network pipe size |
 | `-f` | Do not daemonize, stay in foreground |
 | `-s` | Single threaded operation |
 | `-o reconnect` | Automatically reconnect to the server if the connection is interrupted. While NetpipeFS is not connected, attempts to do operations on files will return EAGAIN |

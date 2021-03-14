@@ -28,7 +28,7 @@ static int on_open(struct netpipefs_socket *netpipefs_socket, char *path) {
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
-    EQNULL(netpipefs_file_open_remote(path, mode), return -1)
+    EQNULL(netpipefs_file_open_update(path, netpipefs_options.pipecapacity, mode), return -1)
 
     return 1; // > 0
 }
@@ -39,21 +39,23 @@ static int on_close(struct netpipefs_socket *netpipefs_socket, char *path) {
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: CLOSE %s %d\n", path, mode);
-    MINUS1(netpipefs_file_close_remote(path, mode), return -1)
+
+    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    if (file == NULL) return -1;
+    MINUS1(netpipefs_file_close_update(file, mode), return -1)
 
     return bytes; // > 0
 }
 
 static int on_write(struct netpipefs_socket *netpipefs_socket, char *path) {
     int bytes;
-    char *buf = NULL;
-    bytes = socket_read_h(netpipefs_socket->fd_skt, (void**) &buf);
-    if (bytes <= 0) return bytes;
-    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
 
-    bytes = netpipefs_file_write_local(path, buf, bytes);
-    free(buf);
+    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    if (file == NULL) return -1;
+    bytes = netpipefs_file_recv(file);
+
     if (bytes <= 0) {
+        DEBUG("remote: WRITE %s\n", path);
         if (errno == EPIPE) {
             DEBUG("on write broken pipe\n");
             return 1;
@@ -61,20 +63,24 @@ static int on_write(struct netpipefs_socket *netpipefs_socket, char *path) {
         return -1;
     }
 
+    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
     return bytes;
 }
 
 static int on_read(struct netpipefs_socket *netpipefs_socket, char *path) {
-    int bytes, read;
-    read = readn(netpipefs_socket->fd_skt, &bytes, sizeof(int));
-    if (read <= 0) return read;
+    int err, bytes;
+    size_t size;
+    bytes = readn(netpipefs_socket->fd_skt, &size, sizeof(size_t));
+    if (bytes <= 0) return bytes;
 
-    DEBUG("remote: READ %s %d bytes\n", path, bytes);
+    DEBUG("remote: READ %s %ld bytes\n", path, size);
 
-    bytes = netpipefs_file_read_remote(path, bytes);
-    if (bytes <= 0) return -1;
+    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    if (file == NULL) return -1;
+    err = netpipefs_file_read_update(file, size);
+    if (err == -1) return -1;
 
-    return read;
+    return bytes;
 }
 
 static void *netpipefs_dispatcher_fun(void *args) {

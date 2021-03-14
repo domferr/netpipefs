@@ -107,7 +107,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         return -EINVAL;
     }
 
-    file = netpipefs_file_open_local(path, mode);
+    file = netpipefs_file_open(path, netpipefs_options.pipecapacity, mode);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
@@ -145,7 +145,7 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int bytes = netpipefs_file_read_local(file, buf, size);
+    int bytes = netpipefs_file_read(file, buf, size);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -162,7 +162,7 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int bytes = netpipefs_file_write_remote(file, path, (void *) buf, size);
+    int bytes = netpipefs_file_send(file, buf, size);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -183,7 +183,7 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
-    int ret = netpipefs_file_close_local(file, mode);
+    int ret = netpipefs_file_close(file, mode);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
     }
 
     /* Connect via sockets */
-    PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writesktmtx), NULL), return EXIT_FAILURE)
+    PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writemtx), NULL), return EXIT_FAILURE)
     MINUS1(establish_socket_connection(netpipefs_options.port, netpipefs_options.hostport, netpipefs_options.hostip, netpipefs_options.timeout), perror("unable to establish socket communication"); netpipefs_opt_free(
             &args); return EXIT_FAILURE)
 
@@ -338,7 +338,7 @@ int main(int argc, char** argv) {
     /* Destroy socket and socket's mutex */
     if (netpipefs_socket.port != -1)
     MINUS1(socket_destroy(netpipefs_socket.fd_skt, netpipefs_socket.port), perror("failed to close socket connection"))
-    PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writesktmtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
+    PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writemtx)), perror("failed to destroy socket's mutex"); return EXIT_FAILURE)
 
     return ret;
 }

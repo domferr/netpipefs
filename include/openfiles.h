@@ -17,20 +17,32 @@ int netpipefs_open_files_table_init(void);
  */
 int netpipefs_open_files_table_destroy(void);
 
-struct netpipefs_file *netpipefs_file_open_local(const char *path, int mode);
+/**
+ * Returns the file structure for the given path or NULL if it doesn't exist
+ *
+ * @param path file's path
+ *
+ * @return the file structure or NULL if it doesn't exist
+ */
+struct netpipefs_file *netpipefs_get_open_file(const char *path);
 
-struct netpipefs_file *netpipefs_file_open_remote(const char *path, int mode);
+/**
+ * Removes the file with key path from the open file table. The file structure is also freed.
+ *
+ * @param path file's path
+ *
+ * @return 0 on success, -1 on error
+ */
+int netpipefs_remove_open_file(const char *path);
 
-int netpipefs_file_write_local(const char *path, char *buf, size_t size);
-
-int netpipefs_file_write_remote(struct netpipefs_file *file, const char *path, char *buf, size_t size);
-
-int netpipefs_file_read_local(struct netpipefs_file *file, char *buf, size_t size);
-
-int netpipefs_file_read_remote(const char* path, size_t size);
-
-int netpipefs_file_close_local(struct netpipefs_file *file, int mode);
-
-int netpipefs_file_close_remote(const char *path, int mode);
+/**
+ * Returns the file structure for the given path or NULL if it doesn't exist
+ *
+ * @param path file's path
+ * @param max_capacity file's max capacity
+ *
+ * @return the file structure or NULL if it doesn't exist
+ */
+struct netpipefs_file *netpipefs_get_or_create_open_file(const char *path, size_t max_capacity, int *just_created);
 
 #endif //OPENFILES_H
