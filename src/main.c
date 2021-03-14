@@ -326,6 +326,8 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    DEBUG("remote pipe capacity: %ld\n", netpipefs_socket.remotepipecapacity);
+
     /* Create open files table */
     if (netpipefs_open_files_table_init() == -1) {
         perror("failed to create file table");

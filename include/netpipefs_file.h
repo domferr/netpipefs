@@ -8,7 +8,7 @@
 /** Print debug info about the given file */
 #define DEBUGFILE(file) DEBUG("   %s: %d readers, %d writers, %ld local bytes, %ld remote bytes\n", file->path, file->readers, file->writers, cbuf_size(file->buffer), file->remotesize)
 
-#define DEFAULT_FILE_CAPACITY 1024
+#define DEFAULT_PIPE_CAPACITY 1024
 
 /** Structure for a file in netpipefs */
 struct netpipefs_file {

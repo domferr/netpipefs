@@ -33,7 +33,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     netpipefs_options.port = DEFAULT_PORT;
     netpipefs_options.hostip = NULL;
     netpipefs_options.hostport = DEFAULT_PORT;
-    netpipefs_options.pipecapacity = DEFAULT_FILE_CAPACITY;
+    netpipefs_options.pipecapacity = DEFAULT_PIPE_CAPACITY;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
@@ -97,8 +97,8 @@ void netpipefs_usage(const char *progname) {
            "    --hostip=<s>           remote host ip address to which connect to\n"
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
-           "    --netpipecapacity=<d>  max network pipe capacity (default: %d)\n"
-           "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT, DEFAULT_FILE_CAPACITY);
+           "    --pipecapacity=<d>     max network pipe capacity (default: %d)\n"
+           "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT, DEFAULT_PIPE_CAPACITY);
     fuse_usage();
 }
 

@@ -199,7 +199,6 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
         file->remotesize += bytes;
         DEBUGFILE(file);
         PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipefs_file_unlock(file); return -1)
-        //TODO wait for a response and return it. if it is a failure then set file->size -= bytes. if it is success then pthread_cond_broadcast
     }
     NOTZERO(netpipefs_file_unlock(file), return -1)
 
@@ -214,7 +213,6 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
 
     NOTZERO(netpipefs_file_lock(file), free(buf); return -1)
 
-    // TODO compare with local capacity
     while (cbuf_size(file->buffer) + size > netpipefs_options.pipecapacity && file->readers > 0) { //TODO block if the pipe is full but send portions of data
         fprintf(stderr, "cannot write locally: file size %ld < %d. Something is wrong!\n", cbuf_size(file->buffer), size);
         PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); free(buf); return -1)
