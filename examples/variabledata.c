@@ -50,6 +50,7 @@ static int producer(char *arg1, char *arg2) {
     printf("producer -> wrote %ld bytes\n", sizeof(int) * datalen * i);
     if (wrote <= 0) perror("producer -> writen");
 
+    printf("Waiting 1 second..\n");
     /* Wait 1 second to leave some time to consumer to read all the data */
     sleep(1);
 
