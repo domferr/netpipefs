@@ -68,6 +68,7 @@ static int consumer() {
         printf("End of file\n");
         return 0;
     }
+    printf("max numbers = %d\n", maxnumbers);
     int *numbers = (int*) malloc(sizeof(int)*maxnumbers);
     EQNULL(numbers, perror("malloc"); return EXIT_FAILURE)
 
