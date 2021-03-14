@@ -28,7 +28,7 @@ static int on_open(struct netpipefs_socket *netpipefs_socket, char *path) {
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
-    EQNULL(netpipefs_file_open_update(path, netpipefs_options.pipecapacity, mode), return -1)
+    EQNULL(netpipefs_file_open_update(path, mode), return -1)
 
     return 1; // > 0
 }

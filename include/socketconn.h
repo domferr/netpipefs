@@ -10,7 +10,8 @@
 struct netpipefs_socket {
     int fd_skt;     // used to communicate via sockets
     int port;       // port used for this connection
-    pthread_mutex_t writesktmtx;
+    pthread_mutex_t writemtx;
+    size_t remotepipecapacity;
 };
 
 enum netpipefs_message {

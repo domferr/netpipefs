@@ -14,6 +14,7 @@
 #include "../include/options.h"
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
+#include "../include/scfiles.h"
 
 /* Command line options */
 struct netpipefs_options netpipefs_options;
@@ -107,7 +108,7 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         return -EINVAL;
     }
 
-    file = netpipefs_file_open(path, netpipefs_options.pipecapacity, mode);
+    file = netpipefs_file_open(path, mode);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
@@ -244,41 +245,41 @@ static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondp
     return firstport - secondport;
 }
 
-static int establish_socket_connection(int local_port, int remote_port, char *host, long timeout) {
+static int establish_socket_connection(long timeout) {
     int err, fd_server, fd_accepted, fd_skt;
     char *host_received = NULL;
-    size_t host_len = strlen(host);
+    size_t host_len = strlen(netpipefs_options.hostip);
     if (host_len == 0) return -1;
 
-    MINUS1(fd_server = socket_listen(local_port), return -1)
-    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), socket_destroy(fd_server, local_port); return -1)
+    MINUS1(fd_server = socket_listen(netpipefs_options.port), return -1)
+    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), socket_destroy(fd_server, netpipefs_options.port); return -1)
 
-    // try to connect
-    MINUS1(socket_connect_interval(fd_skt, remote_port, timeout), close(fd_skt); socket_destroy(fd_server, local_port); return -1)
+    /* try to connect */
+    MINUS1(socket_connect_interval(fd_skt, netpipefs_options.hostport, timeout), close(fd_skt); socket_destroy(fd_server, netpipefs_options.port); return -1)
 
-    // try to accept
+    /* try to accept */
     MINUS1(fd_accepted = socket_accept(fd_server, timeout), goto error)
 
-    // send host
-    err = socket_write_h(fd_skt, (void*) host, sizeof(char)*(1+host_len));
+    /* send host */
+    err = socket_write_h(fd_skt, (void*) netpipefs_options.hostip, sizeof(char)*(1+host_len));
     if (err <= 0) goto error;
 
-    // read other host
+    /* read other host */
     err = socket_read_h(fd_accepted, (void**) &host_received);
     if (err <= 0) goto error;
 
-    // compare the hosts
-    int comparison = hostcmp(host, local_port, host_received, remote_port);
+    /* compare the hosts */
+    int comparison = hostcmp(netpipefs_options.hostip, netpipefs_options.port, host_received, netpipefs_options.hostport);
     if (comparison > 0) {
         MINUS1(close(fd_skt), goto error)
         // not needed to accept other connections anymore
         MINUS1(close(fd_server), goto error)
         netpipefs_socket.fd_skt = fd_accepted;
-        netpipefs_socket.port  = local_port;
+        netpipefs_socket.port  = netpipefs_options.port;
     } else if (comparison < 0) {
         // not needed to accept other connections anymore
         MINUS1(close(fd_accepted), goto error)
-        MINUS1(socket_destroy(fd_server, local_port), goto error)
+        MINUS1(socket_destroy(fd_server, netpipefs_options.port), goto error)
         netpipefs_socket.fd_skt = fd_skt;
         netpipefs_socket.port  = -1;
     } else {
@@ -286,13 +287,21 @@ static int establish_socket_connection(int local_port, int remote_port, char *ho
         goto error;
     }
 
+    /* send local pipe capacity */
+    err = writen(netpipefs_socket.fd_skt, &netpipefs_options.pipecapacity, sizeof(size_t));
+    if (err <= 0) goto error;
+
+    /* read remote pipe capacity */
+    err = readn(netpipefs_socket.fd_skt, &netpipefs_socket.remotepipecapacity, sizeof(size_t));
+    if (err <= 0) goto error;
+
     free(host_received);
     return 0;
 
 error:
     if (fd_accepted != -1) close(fd_accepted);
-    socket_destroy(fd_server, local_port);
-    socket_destroy(fd_skt, remote_port);
+    socket_destroy(fd_server, netpipefs_options.port);
+    socket_destroy(fd_skt, netpipefs_options.hostport);
     if (host_received) free(host_received);
     return -1;
 }
@@ -309,17 +318,28 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    /* Connect via sockets */
+    /* Connect via socket */
     PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writemtx), NULL), return EXIT_FAILURE)
-    MINUS1(establish_socket_connection(netpipefs_options.port, netpipefs_options.hostport, netpipefs_options.hostip, netpipefs_options.timeout), perror("unable to establish socket communication"); netpipefs_opt_free(
-            &args); return EXIT_FAILURE)
+    if (establish_socket_connection(netpipefs_options.timeout) == -1) {
+        perror("unable to establish socket communication");
+        netpipefs_opt_free(&args);
+        return EXIT_FAILURE;
+    }
 
     /* Create open files table */
-    MINUS1(netpipefs_open_files_table_init(), perror("failed to create file table"); netpipefs_opt_free(&args); return EXIT_FAILURE)
+    if (netpipefs_open_files_table_init() == -1) {
+        perror("failed to create file table");
+        netpipefs_opt_free(&args);
+        return EXIT_FAILURE;
+    }
 
     /* Run dispatcher */
-    EQNULL(dispatcher = netpipefs_dispatcher_run(&netpipefs_socket), perror("failed to run dispatcher"); netpipefs_opt_free(
-            &args); return EXIT_FAILURE)
+    dispatcher = netpipefs_dispatcher_run(&netpipefs_socket);
+    if (dispatcher == NULL) {
+        perror("failed to run dispatcher");
+        netpipefs_opt_free(&args);
+        return EXIT_FAILURE;
+    }
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
     ret = fuse_main(args.argc, args.argv, &netpipefs_oper, NULL);
@@ -327,6 +347,7 @@ int main(int argc, char** argv) {
 
     DEBUG("%s\n", "cleanup");
     netpipefs_opt_free(&args);
+
     /* Stop and join dispatcher thread */
     MINUS1(netpipefs_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
     MINUS1(netpipefs_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))

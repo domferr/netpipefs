@@ -11,7 +11,7 @@
 
 extern struct netpipefs_socket netpipefs_socket;
 
-struct netpipefs_file *netpipefs_file_alloc(const char *path, size_t max_capacity) {
+struct netpipefs_file *netpipefs_file_alloc(const char *path) {
     int err;
     struct netpipefs_file *file = (struct netpipefs_file *) malloc(sizeof(struct netpipefs_file));
     EQNULL(file, return NULL)
@@ -43,7 +43,7 @@ struct netpipefs_file *netpipefs_file_alloc(const char *path, size_t max_capacit
         goto error;
     }
 
-    file->buffer = cbuf_alloc(max_capacity);
+    file->buffer = cbuf_alloc(netpipefs_options.pipecapacity);
     if (file->buffer == NULL) {
         pthread_cond_destroy(&(file->canopen));
         pthread_cond_destroy(&(file->isfull));
@@ -54,6 +54,7 @@ struct netpipefs_file *netpipefs_file_alloc(const char *path, size_t max_capacit
     file->writers = 0;
     file->readers = 0;
     file->remotesize = 0;
+    file->remotecapacity = netpipefs_socket.remotepipecapacity;
 
     return file;
 
@@ -89,7 +90,7 @@ int netpipefs_file_unlock(struct netpipefs_file *file) {
     return err;
 }
 
-struct netpipefs_file *netpipefs_file_open(const char *path, size_t max_capacity, int mode) {
+struct netpipefs_file *netpipefs_file_open(const char *path, int mode) {
     int err, bytes, just_created = 0;
     struct netpipefs_file *file;
 
@@ -99,7 +100,7 @@ struct netpipefs_file *netpipefs_file_open(const char *path, size_t max_capacity
     }
 
     /* get the file struct or create it */
-    file = netpipefs_get_or_create_open_file(path, max_capacity, &just_created);
+    file = netpipefs_get_or_create_open_file(path, &just_created);
     if (file == NULL) return NULL;
 
     NOTZERO(netpipefs_file_lock(file), goto error)
@@ -137,7 +138,7 @@ struct netpipefs_file *netpipefs_file_open(const char *path, size_t max_capacity
     return NULL;
 }
 
-struct netpipefs_file *netpipefs_file_open_update(const char *path, size_t max_capacity, int mode) {
+struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode) {
     int err, just_created = 0;
     struct netpipefs_file *file;
 
@@ -146,7 +147,7 @@ struct netpipefs_file *netpipefs_file_open_update(const char *path, size_t max_c
         return NULL;
     }
 
-    file = netpipefs_get_or_create_open_file(path, max_capacity, &just_created);
+    file = netpipefs_get_or_create_open_file(path, &just_created);
     if (file == NULL) return NULL;
 
     NOTZERO(netpipefs_file_lock(file), goto error)
@@ -173,9 +174,8 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
 
     NOTZERO(netpipefs_file_lock(file), return -1)
 
-    // TODO compare with remote capacity
     /* wait for enough remote space if there is at least one reader */
-    while (file->remotesize + size > netpipefs_options.pipecapacity && file->readers > 0) { //TODO block if the pipe is full but send portions of data
+    while (file->remotesize + size > file->remotecapacity && file->readers > 0) { //TODO block if the pipe is full but send portions of data
         PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); return -1)
     }
 

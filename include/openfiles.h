@@ -39,10 +39,9 @@ int netpipefs_remove_open_file(const char *path);
  * Returns the file structure for the given path or NULL if it doesn't exist
  *
  * @param path file's path
- * @param max_capacity file's max capacity
  *
  * @return the file structure or NULL if it doesn't exist
  */
-struct netpipefs_file *netpipefs_get_or_create_open_file(const char *path, size_t max_capacity, int *just_created);
+struct netpipefs_file *netpipefs_get_or_create_open_file(const char *path, int *just_created);
 
 #endif //OPENFILES_H

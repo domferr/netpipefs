@@ -24,7 +24,6 @@ int main(int argc, char** argv) {
 }
 
 /* All the operations with uninitialized table should fail and should set errno to EPERM */
-
 static void test_uninitialized_table(void) {
     const char *path = "./filename.txt";
 
@@ -45,6 +44,7 @@ static void test_uninitialized_table(void) {
     errno = 0;
 }
 
+/* All the operations on the open files hash table */
 static void test_openfiles_table(void) {
     const char *path = "./filename.txt";
     struct netpipefs_file *file;
