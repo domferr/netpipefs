@@ -2,14 +2,6 @@
 #include <errno.h>
 #include "../include/cbuf.h"
 
-struct cbuf_s {
-    char *data;
-    size_t head;
-    size_t tail;
-    size_t capacity;
-    int isfull;
-};
-
 cbuf_t *cbuf_alloc(size_t capacity) {
     if (capacity <= 0) {
         errno = EINVAL;
@@ -36,14 +28,6 @@ cbuf_t *cbuf_alloc(size_t capacity) {
 void cbuf_free(cbuf_t *cbuf) {
     free(cbuf->data);
     free(cbuf);
-}
-
-size_t cbuf_size(cbuf_t *cbuf) {
-    if (cbuf->isfull) return cbuf->capacity;
-
-    if (cbuf->head >= cbuf->tail) return cbuf->head - cbuf->tail;
-
-    return cbuf->capacity + cbuf->head - cbuf->tail;
 }
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
@@ -74,4 +58,16 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
     }
 
     return willget;
+}
+
+size_t cbuf_size(cbuf_t *cbuf) {
+    if (cbuf->isfull) return cbuf->capacity;
+
+    if (cbuf->head >= cbuf->tail) return cbuf->head - cbuf->tail;
+
+    return cbuf->capacity + cbuf->head - cbuf->tail;
+}
+
+size_t cbuf_capacity(cbuf_t *cbuf) {
+    return cbuf->capacity;
 }
