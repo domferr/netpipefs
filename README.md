@@ -28,7 +28,7 @@ NetpipeFS can also be run with valgrind to check for memory leaks:
 
 ## Build
 
-First, download NetpipeFS from this repo. On Linux and BSD, you will also need to install [libfuse](http://github.com/libfuse/libfuse) 2.9.0 or newer. On macOS, you need [OSXFUSE](https://osxfuse.github.io/) instead. To build netpipefs, download the repo and run the following command in the main directory:
+First, download NetpipeFS from this repo. On Linux and BSD, you will also need to install [libfuse](http://github.com/libfuse/libfuse) 2.9.0 or newer. On macOS, you need [OSXFUSE](https://osxfuse.github.io/) instead. To build netpipefs, run the following command in the main directory:
 
     $ make all
     
@@ -47,7 +47,10 @@ To run the test suite first build the tests by running ``make test`` and finally
 | `--pipecapaciy=CAPACITY` | Maximum network pipe size |
 | `-f` | Do not daemonize, stay in foreground |
 | `-s` | Single threaded operation |
-| `-o reconnect` | Automatically reconnect to the server if the connection is interrupted. While NetpipeFS is not connected, attempts to do operations on files will return EAGAIN |
-| `-o delay_connect` | Don't immediately connect to server, wait until mountpoint is first accessed |
 
 NetpipeFS also accepts several options common to all FUSE file systems. See the [FUSE official repository](http://github.com/libfuse/libfuse) for further information.
+
+## Examples
+
+To show what NetpipeFS can do and the usage of network pipes, there are several examples in the `examples` directory.
+Usually the examples work with two mountpoints but they don't mount the filesystem, so run NetpipeFS before running the examples.

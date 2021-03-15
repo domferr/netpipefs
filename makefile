@@ -13,7 +13,7 @@ TSTDIR   	= test
 LIBDIR      = libs
 
 INCLUDES 	= -I $(INCDIR)
-LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # richiesto da FUSE
+LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # required by FUSE
 LIBS		= -lpthread
 
 # dependencies for netpipefs executable
@@ -78,7 +78,7 @@ PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 
 mount_prod: all
-	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --timeout=6000 -s $(PROD_MOUNTPOINT)
+	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 -s $(PROD_MOUNTPOINT)
 
 mount_cons: all
 	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 -s $(CONS_MOUNTPOINT)
