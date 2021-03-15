@@ -11,7 +11,7 @@ Running netpipefs is very simple:
 
 It is recommended to run NetpipeFS as regular user (not as root). For this to work the mountpoint must be owned by the user. If the port or hostport numbers are omitted NetpipeFS will use the default values.
 
-Also many netpipefs options can be specified (see the [Options](/#options) section), including the connection timeout (``--timeout=MILLISECONDS``)
+Also many netpipefs options can be specified (see the [Options](/#options) section), including the connection timeout (``--timeout=MILLISECONDS``).
 
 To unmount the filesystem:
 
@@ -24,6 +24,10 @@ On BSD and macOS, to unmount the filesystem:
 NetpipeFS can also be run with valgrind to check for memory leaks:
 
     valgrind --sim-hints=fuse-compatible netpipefs --port=[local_port] --host=[hostip] --hostport=[hostport] mountpoint
+
+To check if the filesystem is mounted:
+
+    mount | grep netpipefs
 
 
 ## Build
