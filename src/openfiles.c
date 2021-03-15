@@ -22,6 +22,8 @@ int netpipefs_open_files_table_init(void) {
 }
 
 int netpipefs_open_files_table_destroy(void) {
+    if (open_files_table == NULL) return 0;
+
     if (icl_hash_destroy(open_files_table, NULL, (void (*)(void *)) &netpipefs_file_free) == -1)
         return -1;
     open_files_table = NULL;

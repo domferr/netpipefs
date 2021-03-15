@@ -13,18 +13,20 @@
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
 
-static int read_socket_message(struct netpipefs_socket *netpipefs_socket, enum netpipefs_message *message, char **path) {
-    int bytes = readn(netpipefs_socket->fd_skt, message, sizeof(enum netpipefs_message));
+extern struct netpipefs_socket netpipefs_socket;
+
+static int read_socket_message(enum netpipefs_message *message, char **path) {
+    int bytes = readn(netpipefs_socket.fd_skt, message, sizeof(enum netpipefs_message));
     if (bytes > 0)
-        return socket_read_h(netpipefs_socket->fd_skt, (void**) path);
+        return socket_read_h(netpipefs_socket.fd_skt, (void**) path);
 
     return bytes; // <= 0
 }
 
-static int on_open(struct netpipefs_socket *netpipefs_socket, char *path) {
+static int on_open(char *path) {
     int bytes, mode;
 
-    bytes = readn(netpipefs_socket->fd_skt, &mode, sizeof(int));
+    bytes = readn(netpipefs_socket.fd_skt, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
@@ -33,9 +35,9 @@ static int on_open(struct netpipefs_socket *netpipefs_socket, char *path) {
     return 1; // > 0
 }
 
-static int on_close(struct netpipefs_socket *netpipefs_socket, char *path) {
+static int on_close(char *path) {
     int bytes, mode;
-    bytes = readn(netpipefs_socket->fd_skt, &mode, sizeof(int));
+    bytes = readn(netpipefs_socket.fd_skt, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: CLOSE %s %d\n", path, mode);
@@ -47,7 +49,7 @@ static int on_close(struct netpipefs_socket *netpipefs_socket, char *path) {
     return bytes; // > 0
 }
 
-static int on_write(struct netpipefs_socket *netpipefs_socket, char *path) {
+static int on_write(char *path) {
     int bytes;
 
     struct netpipefs_file *file = netpipefs_get_open_file(path);
@@ -67,10 +69,10 @@ static int on_write(struct netpipefs_socket *netpipefs_socket, char *path) {
     return bytes;
 }
 
-static int on_read(struct netpipefs_socket *netpipefs_socket, char *path) {
+static int on_read(char *path) {
     int err, bytes;
     size_t size;
-    bytes = readn(netpipefs_socket->fd_skt, &size, sizeof(size_t));
+    bytes = readn(netpipefs_socket.fd_skt, &size, sizeof(size_t));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: READ %s %ld bytes\n", path, size);
@@ -86,14 +88,13 @@ static int on_read(struct netpipefs_socket *netpipefs_socket, char *path) {
 static void *netpipefs_dispatcher_fun(void *args) {
     int bytes = 1, err, run = 1, nfds;
     struct dispatcher *dispatcher = (struct dispatcher *) args;
-    struct netpipefs_socket *netpipefs_socket = dispatcher->netpipefs_socket;
     DEBUG("%s\n", "dispatcher - running");
 
     fd_set set, rd_set;
     FD_ZERO(&set);
-    FD_SET(netpipefs_socket->fd_skt, &set);
+    FD_SET(netpipefs_socket.fd_skt, &set);
     FD_SET(dispatcher->pipefd[0], &set);
-    nfds = netpipefs_socket->fd_skt > dispatcher->pipefd[0] ? netpipefs_socket->fd_skt:dispatcher->pipefd[0];
+    nfds = netpipefs_socket.fd_skt > dispatcher->pipefd[0] ? netpipefs_socket.fd_skt:dispatcher->pipefd[0];
 
     while(run) {
         rd_set = set;
@@ -106,24 +107,24 @@ static void *netpipefs_dispatcher_fun(void *args) {
         } else {    // can read from socket
             enum netpipefs_message message;
             char *path = NULL;
-            if ((bytes = read_socket_message(netpipefs_socket, &message, &path)) == -1) {
+            if ((bytes = read_socket_message(&message, &path)) == -1) {
                 perror("dispatcher - failed to read socket message");
             } else if (bytes > 0) {
                 switch (message) {
                     case OPEN:
-                        bytes = on_open(netpipefs_socket, path);
+                        bytes = on_open(path);
                         if (bytes == -1) perror("on_open");
                         break;
                     case CLOSE:
-                        bytes = on_close(netpipefs_socket, path);
+                        bytes = on_close(path);
                         if (bytes == -1) perror("on_close");
                         break;
                     case WRITE:
-                        bytes = on_write(netpipefs_socket, path);
+                        bytes = on_write(path);
                         if (bytes == -1) perror("on_write");
                         break;
                     case READ:
-                        bytes = on_read(netpipefs_socket, path);
+                        bytes = on_read(path);
                         if (bytes == -1) perror("on_read");
                         break;
                     default:
@@ -141,7 +142,7 @@ static void *netpipefs_dispatcher_fun(void *args) {
     return 0;
 }
 
-struct dispatcher *netpipefs_dispatcher_run(struct netpipefs_socket *netpipefs_data) {
+struct dispatcher *netpipefs_dispatcher_run(void) {
     struct dispatcher *dispatcher = (struct dispatcher*) malloc(sizeof(struct dispatcher));
     EQNULL(dispatcher, return NULL)
 
@@ -152,7 +153,6 @@ struct dispatcher *netpipefs_dispatcher_run(struct netpipefs_socket *netpipefs_d
         return NULL;
     }
 
-    dispatcher->netpipefs_socket = netpipefs_data;
     return dispatcher;
 }
 

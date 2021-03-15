@@ -2,12 +2,11 @@
 #define DISPATCHER_H
 
 struct dispatcher {
-    struct netpipefs_socket *netpipefs_socket;
     pthread_t tid;  // dispatcher's thread id
     int pipefd[2];  // used to communicate with main thread
 };
 
-struct dispatcher *netpipefs_dispatcher_run(struct netpipefs_socket *netpipefs_data);
+struct dispatcher *netpipefs_dispatcher_run(void);
 
 int netpipefs_dispatcher_stop(struct dispatcher *dispatcher);
 

@@ -194,7 +194,7 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
     while (remaining > 0 && file->readers > 0) {
         /* file is full on the remote host. wait for enough space */
         while(file->remotesize == file->remotecapacity && file->readers > 0) {
-            fprintf(stderr, "cannot send: remote buffer is full\n");
+            DEBUG("cannot send: remote buffer is full\n");
             PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 
@@ -243,7 +243,7 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     while (remaining > 0 && file->readers > 0) {
         /* file is empty. wait for data */
         while(cbuf_size(file->buffer) == cbuf_capacity(file->buffer) && file->readers > 0) {
-            fprintf(stderr, "cannot write locally: file size %ld < %ld. Something is wrong!\n", cbuf_size(file->buffer), size);
+            DEBUG("cannot write locally: file size %ld < %ld. Something is wrong!\n", cbuf_size(file->buffer), size);
             PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 
@@ -294,7 +294,7 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
     while (remaining > 0 && file->writers > 0) {
         /* file is empty. wait for data */
         while(cbuf_size(file->buffer) == 0 && file->writers > 0) {
-            fprintf(stderr, "cannot read: file size %ld < %ld\n", cbuf_size(file->buffer), size);
+            DEBUG("cannot read: file size %ld < %ld\n", cbuf_size(file->buffer), size);
             PTH(err, pthread_cond_wait(&(file->isempty), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 

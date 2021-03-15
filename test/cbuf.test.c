@@ -49,7 +49,6 @@ int main(int argc, char** argv) {
 
     if (write(pipefd[1], dummydata, capacity/3 + capacity/4) < (ssize_t)(capacity/3 + capacity/4)) return EXIT_FAILURE;
     test(cbuf_readn(pipefd[0], buffer, capacity/3 + capacity/4) == (capacity/3 + capacity/4))
-    printf("%ld\n", cbuf_size(buffer));
     test(cbuf_size(buffer) == capacity)
 
     testpassed("Circular buffer");
