@@ -23,7 +23,7 @@
 #define MAXNUMBERS 10
 
 /**
- * Function executed by the producer process
+ * Function executed by the send_data process
  */
 static int producer() {
     int fd, prec1 = 0, prec2 = 1, next = 1, counter = 2, maxnumbers = MAXNUMBERS;
@@ -54,13 +54,13 @@ static int producer() {
 }
 
 /**
- * Function executed by the consumer process
+ * Function executed by the recv_data process
  */
 static int consumer() {
     int fd, read, maxnumbers;
 
     // Open file
-    MINUS1ERR(fd = open(CONSUMER_FILEPATH, O_RDONLY), return EXIT_FAILURE);
+    MINUS1ERR(fd = open(CONSUMER_FILEPATH, O_RDONLY), return EXIT_FAILURE)
 
     // Read from it
     ISNEGATIVEERR(read = readn(fd, &maxnumbers, sizeof(int)), return EXIT_FAILURE)

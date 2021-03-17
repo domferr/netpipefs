@@ -22,7 +22,7 @@
 #define CONSUMER_FILEPATH "./tmp/cons/mypipe.txt"
 
 /**
- * Function executed by the producer process
+ * Function executed by the send_data process
  */
 static int producer(char *arg1, char *arg2) {
     int wrote = 1, fd;
@@ -47,10 +47,10 @@ static int producer(char *arg1, char *arg2) {
         wrote = writen(fd, dummydata, datalen);
         i++;
     }
-    printf("producer -> wrote %ld bytes\n", sizeof(int) * datalen * i);
-    if (wrote <= 0) perror("producer -> writen");
+    printf("send_data -> wrote %ld bytes\n", sizeof(int) * datalen * i);
+    if (wrote <= 0) perror("send_data -> writen");
 
-    printf("producer -> waiting 1 second...\n");
+    printf("send_data -> waiting 1 second...\n");
     /* Wait 1 second to leave some time to consumer to read all the data */
     sleep(1);
 
@@ -60,7 +60,7 @@ static int producer(char *arg1, char *arg2) {
 }
 
 /**
- * Function executed by the consumer process
+ * Function executed by the recv_data process
  */
 static int consumer(char *arg1, char *arg2) {
     int read = 1, fd;
@@ -82,8 +82,8 @@ static int consumer(char *arg1, char *arg2) {
         read = readn(fd, data, datalen);
         i++;
     }
-    printf("consumer -> read %ld bytes\n", sizeof(int) * datalen * i);
-    if (read <= 0) perror("consumer -> readn");
+    printf("recv_data -> read %ld bytes\n", sizeof(int) * datalen * i);
+    if (read <= 0) perror("recv_data -> readn");
 
     // Close
     MINUS1ERR(close(fd), return EXIT_FAILURE)
@@ -101,10 +101,10 @@ int main(int argc, char** argv) {
     MINUS1ERR(pid_cons = fork(), return EXIT_FAILURE)
 
     if (pid_cons == 0) {
-        return consumer(argv[3], argv[4]);
+        return recv_data(argv[3], argv[4]);
     }
 
-    int ret = producer(argv[1], argv[2]);
+    int ret = send_data(argv[1], argv[2]);
 
     MINUS1(waitpid(pid_cons, NULL, 0), fprintf(stderr, "failure to wait pid %d: ", pid_cons); perror(""); return EXIT_FAILURE)
     return ret;
