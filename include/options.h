@@ -19,6 +19,7 @@ struct netpipefs_options {
     int port;
     char *hostip;
     int hostport;
+    int singlethreaded;
 };
 
 extern struct netpipefs_options netpipefs_options;

@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #define NETPIPEFS_OPT(t, p, v) { t, offsetof(struct netpipefs_options, p), v }
 
@@ -14,15 +13,16 @@
  * netpipefs's option descriptor array
  */
 static const struct fuse_opt netpipefs_opts[] = {
-        NETPIPEFS_OPT("--port=%i",          port, 0),
-        NETPIPEFS_OPT("-p %i",              port, 0),
-        NETPIPEFS_OPT("--hostip=%s",        hostip, 0),
-        NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
-        NETPIPEFS_OPT("--timeout=%i",       timeout, 0),
         NETPIPEFS_OPT("-h",                 show_help, 1),
         NETPIPEFS_OPT("--help",             show_help, 1),
+        NETPIPEFS_OPT("-s",                 singlethreaded, 1),
         NETPIPEFS_OPT("-d",                 debug, 1),
         NETPIPEFS_OPT("--debug",            debug, 1),
+        NETPIPEFS_OPT("-p %i",              port, 0),
+        NETPIPEFS_OPT("--port=%i",          port, 0),
+        NETPIPEFS_OPT("--timeout=%i",       timeout, 0),
+        NETPIPEFS_OPT("--hostip=%s",        hostip, 0),
+        NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
         NETPIPEFS_OPT("--pipecapacity=%i",  pipecapacity, 0),
 
         FUSE_OPT_END
@@ -35,6 +35,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     netpipefs_options.hostip = NULL;
     netpipefs_options.hostport = DEFAULT_PORT;
     netpipefs_options.pipecapacity = DEFAULT_PIPE_CAPACITY;
+    netpipefs_options.singlethreaded = 0;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
@@ -79,6 +80,11 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         MINUS1ERR(fuse_opt_add_arg(args, "-d"),  return -1)
     }
 
+    /* Check for singlethreaded flag */
+    if (netpipefs_options.singlethreaded) {
+        MINUS1ERR(fuse_opt_add_arg(args, "-s"),  return -1)
+    }
+
     return 0;
 }
 
@@ -94,7 +100,7 @@ void netpipefs_usage(const char *progname) {
     printf("usage: %s [options] <mountpoint>\n"
            "\n", progname);
     printf("netpipefs options:\n"
-           "    --port=<d>             local port used for the socket connection (default: %d)\n"
+           "    -p <d>, --port=<d>     local port used for the socket connection (default: %d)\n"
            "    --hostip=<s>           remote host ip address to which connect to\n"
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
