@@ -12,16 +12,9 @@
 #include "../include/socketconn.h"
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
+#include "../include/netpipefs_socket.h"
 
 extern struct netpipefs_socket netpipefs_socket;
-
-static int read_socket_message(enum netpipefs_message *message, char **path) {
-    int bytes = readn(netpipefs_socket.fd_skt, message, sizeof(enum netpipefs_message));
-    if (bytes > 0)
-        return socket_read_h(netpipefs_socket.fd_skt, (void**) path);
-
-    return bytes; // <= 0
-}
 
 static int on_open(char *path) {
     int bytes, mode;
@@ -105,12 +98,12 @@ static void *netpipefs_dispatcher_fun(void *args) {
         } else if (FD_ISSET(dispatcher->pipefd[0], &rd_set)) {  // pipe can be read then stop running
             run = 0;
         } else {    // can read from socket
-            enum netpipefs_message message;
+            enum netpipefs_header header;
             char *path = NULL;
-            if ((bytes = read_socket_message(&message, &path)) == -1) {
+            if ((bytes = read_socket_header(&netpipefs_socket, &header, &path)) == -1) {
                 perror("dispatcher - failed to read socket message");
             } else if (bytes > 0) {
-                switch (message) {
+                switch (header) {
                     case OPEN:
                         bytes = on_open(path);
                         if (bytes == -1) perror("on_open");

@@ -15,6 +15,7 @@
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
 #include "../include/scfiles.h"
+#include "../include/netpipefs_socket.h"
 
 /* Command line options */
 struct netpipefs_options netpipefs_options;

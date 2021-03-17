@@ -8,6 +8,7 @@
 #include "../include/socketconn.h"
 #include "../include/openfiles.h"
 #include "../include/scfiles.h"
+#include "../include/netpipefs_socket.h"
 
 extern struct netpipefs_socket netpipefs_socket;
 
@@ -111,9 +112,8 @@ struct netpipefs_file *netpipefs_file_open(const char *path, int mode) {
     DEBUGFILE(file);
     PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipefs_file_unlock(file); goto error)
 
-    PTH(err, pthread_mutex_lock(&(netpipefs_socket.writemtx)), netpipefs_file_unlock(file); goto error)
-    bytes = write_socket_message(netpipefs_socket.fd_skt, OPEN, path, mode);
-    PTH(err, pthread_mutex_unlock(&(netpipefs_socket.writemtx)), netpipefs_file_unlock(file); goto error)
+    bytes = send_open_message(&netpipefs_socket, path, mode);
+
     if (bytes <= 0) { // cannot write over socket
         netpipefs_file_unlock(file);
         goto error;
@@ -169,20 +169,6 @@ struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode) {
     return NULL;
 }
 
-static int send_write_message(const char *path, const char *buf, size_t size) {
-    int err, bytes;
-
-    PTH(err, pthread_mutex_lock(&(netpipefs_socket.writemtx)), return -1)
-    bytes = write_socket_message(netpipefs_socket.fd_skt, WRITE, path, -1);
-    if (bytes > 0) {
-        bytes = socket_write_h(netpipefs_socket.fd_skt, (void*) buf, size);
-    }
-    PTH(err, pthread_mutex_unlock(&(netpipefs_socket.writemtx)), return -1)
-    if (bytes > 0) DEBUG("sent: WRITE %s %ld <DATA>\n", path, size);
-
-    return bytes;
-}
-
 int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size) {
     int err;
 
@@ -202,7 +188,8 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
         if (file->readers > 0) {
             size_t available = file->remotecapacity - file->remotesize;
             size_t tobesent = remaining < available ? remaining:available;
-            datasent = send_write_message(file->path, bufptr, tobesent);
+            /* send data via socket */
+            datasent = send_write_message(&netpipefs_socket, file->path, bufptr, tobesent);
             if (datasent <= 0) {
                 netpipefs_file_unlock(file);
                 return datasent;
@@ -241,9 +228,9 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     size_t remaining = size;
     size_t dataput;
     while (remaining > 0 && file->readers > 0) {
-        /* file is empty. wait for data */
+        /* file is full. wait for data */
         while(cbuf_size(file->buffer) == cbuf_capacity(file->buffer) && file->readers > 0) {
-            DEBUG("cannot write locally: file size %ld < %ld. Something is wrong!\n", cbuf_size(file->buffer), size);
+            DEBUG("cannot write locally: file is full. Something is wrong!\n");
             PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 
@@ -270,19 +257,6 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     return size;
 }
 
-static int send_read_message(const char *path, size_t size) {
-    int err, bytes_wrote;
-    PTH(err, pthread_mutex_lock(&(netpipefs_socket.writemtx)), return -1)
-    bytes_wrote = write_socket_message(netpipefs_socket.fd_skt, READ, path, -1);
-    if (bytes_wrote > 0) {
-        bytes_wrote = writen(netpipefs_socket.fd_skt, &size, sizeof(size_t));
-    }
-    PTH(err, pthread_mutex_unlock(&(netpipefs_socket.writemtx)), return -1)
-    if (bytes_wrote > 0) DEBUG("sent: READ %s %ld\n", path, size);
-
-    return bytes_wrote;
-}
-
 int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
     int err, bytes_wrote;
     char *bufptr = buf;
@@ -294,7 +268,7 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
     while (remaining > 0 && file->writers > 0) {
         /* file is empty. wait for data */
         while(cbuf_size(file->buffer) == 0 && file->writers > 0) {
-            DEBUG("cannot read: file size %ld < %ld\n", cbuf_size(file->buffer), size);
+            DEBUG("cannot read: file is empty\n");
             PTH(err, pthread_cond_wait(&(file->isempty), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 
@@ -308,7 +282,7 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
             PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipefs_file_unlock(file); return -1)
 
             /* Send READ message */
-            bytes_wrote = send_read_message(file->path, datagot);
+            bytes_wrote = send_read_message(&netpipefs_socket, file->path, datagot);
             if (bytes_wrote <= 0) {
                 netpipefs_file_unlock(file);
                 return -1;
@@ -331,6 +305,7 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
 
 int netpipefs_file_read_update(struct netpipefs_file *file, size_t size) {
     int err;
+
     NOTZERO(netpipefs_file_lock(file), return -1)
 
     /* update remote size and wake up writers */
@@ -362,12 +337,8 @@ int netpipefs_file_close(struct netpipefs_file *file, int mode) {
         free_memory = 1;
     }
 
-    PTH(err, pthread_mutex_lock(&(netpipefs_socket.writemtx)), return -1)
-    bytes = write_socket_message(netpipefs_socket.fd_skt, CLOSE, file->path, mode);
-    PTH(err, pthread_mutex_unlock(&(netpipefs_socket.writemtx)), return -1)
+    bytes = send_close_message(&netpipefs_socket, file->path, mode);
     if (bytes <= 0) return bytes;
-
-    DEBUG("sent: CLOSE %s %d\n", file->path, mode);
 
     if (free_memory) {
         MINUS1(netpipefs_remove_open_file(file->path), err = -1)

@@ -171,30 +171,3 @@ int socket_destroy(int fd, int port) {
     sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
     return unlink(sockname);
 }
-
-int write_socket_message(int fd_skt, enum netpipefs_message message, const char *path, int mode) {
-    int bytes = writen(fd_skt, &message, sizeof(enum netpipefs_message));
-    if (bytes <= 0) return bytes;
-
-    bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));
-    if (bytes <= 0) return bytes;
-
-    if (mode != -1) bytes = writen(fd_skt, &mode, sizeof(int));
-    return bytes;
-}
-
-int socket_read_t(int fd, void *buf, size_t size, long timeout) {
-    int err;
-    ISNEGATIVE(timeout, timeout = DEFAULT_TIMEOUT)
-    struct timeval time_to_wait = { MS_TO_SEC(timeout), MS_TO_USEC(timeout) };
-    fd_set rd_set;
-
-    FD_ZERO(&rd_set);
-    FD_SET(fd, &rd_set);
-    MINUS1(err = select(fd + 1, &rd_set, NULL, NULL, &time_to_wait), return -1);
-    if (err == 0) {
-        errno = ETIMEDOUT;
-        return -1;
-    }
-    return readn(fd, buf, size);
-}

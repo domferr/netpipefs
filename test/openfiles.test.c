@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include "../include/openfiles.h"
 #include "testutilities.h"
-#include "../include/socketconn.h"
+#include "../include/netpipefs_socket.h"
 
 struct netpipefs_options netpipefs_options;
 struct netpipefs_socket netpipefs_socket;
