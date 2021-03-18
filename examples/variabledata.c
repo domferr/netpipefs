@@ -50,9 +50,9 @@ static int producer(char *arg1, char *arg2) {
     printf("send_data -> wrote %ld bytes\n", sizeof(int) * datalen * i);
     if (wrote <= 0) perror("send_data -> writen");
 
-    printf("send_data -> waiting 1 second...\n");
+    //printf("send_data -> waiting 1 second...\n");
     /* Wait 1 second to leave some time to consumer to read all the data */
-    sleep(1);
+    //sleep(1);
 
     // Close
     MINUS1ERR(close(fd), return EXIT_FAILURE);
@@ -101,10 +101,10 @@ int main(int argc, char** argv) {
     MINUS1ERR(pid_cons = fork(), return EXIT_FAILURE)
 
     if (pid_cons == 0) {
-        return recv_data(argv[3], argv[4]);
+        return consumer(argv[3], argv[4]);
     }
 
-    int ret = send_data(argv[1], argv[2]);
+    int ret = producer(argv[1], argv[2]);
 
     MINUS1(waitpid(pid_cons, NULL, 0), fprintf(stderr, "failure to wait pid %d: ", pid_cons); perror(""); return EXIT_FAILURE)
     return ret;

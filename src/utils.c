@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include "../include/utils.h"
 
+#define LONG1E9 1000000000L //1e9
+
 int msleep(int milliseconds) {
     struct timespec req = {MS_TO_SEC(milliseconds), MS_TO_NANOSEC(milliseconds)};
     struct timespec rem = {0, 0};
@@ -31,4 +33,18 @@ int ipv4_address_to_array(const char *ipstr, int *res) {
     if (*endptr != '\0')
         return -1; // there is something after the ip address
     return 0;
+}
+
+struct timespec elapsed_time(struct timespec *start) {
+    struct timespec now = {1,0};
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == -1) return (struct timespec){-1,-1};
+
+    struct timespec diff = {now.tv_sec - start->tv_sec, now.tv_nsec - start->tv_nsec};
+    if (diff.tv_nsec < 0) {
+        diff.tv_sec -= 1;
+        diff.tv_nsec += LONG1E9;
+    }
+
+    //diff.tv_sec * 1000L + diff.tv_nsec / 1000000L
+    return diff;
 }

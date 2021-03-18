@@ -3,7 +3,7 @@
  * and how many iterations should be done.
  *
  * Run the following command to build this example
- * gcc -Wall examples/benchmark.c src/scfiles.c -o bin/benchmark -lpthread
+ * gcc -Wall examples/benchmark.c src/scfiles.c src/utils.c -o bin/benchmark -lpthread
  *
  * Example usage. Send 10Mb with 65Kb blocks and read them with 32 Kb blocks:
  * ./bin/benchmark 65536 160 32768 320
@@ -33,14 +33,21 @@ typedef struct arg {
     const char *path;
     size_t data_block;
     size_t iterations;
-    double bench;
+    struct timespec bench;
     int error;
 } arg_t;
 
-#define ARG_INIZIALIZER_FD(fd, datablock, iterations) { fd, NULL, datablock, iterations, -1, 0 }
-#define ARG_INIZIALIZER(path, datablock, iterations) { -1, path, datablock, iterations, -1, 0 }
+#define ARG_INIZIALIZER_FD(fd, datablock, iterations) { fd, NULL, datablock, iterations, {-1,-1}, 0 }
+#define ARG_INIZIALIZER(path, datablock, iterations) { -1, path, datablock, iterations, {-1,-1}, 0 }
 
-#define LOGBENCH(name, write, read) fprintf(stdout, "[%s] write: %.5fs, read: %.5fs\n", name, write, read)
+/* Converts a timespec to a fractional number of seconds.
+ * From: https://github.com/solemnwarning/timespec/blob/master/timespec.c
+ */
+#define TIMESPEC_TO_DOUBLE(ts) ((double)((ts).tv_sec) + ((double)((ts).tv_nsec) / 1000000000))
+
+#define LOGBENCH(name, write, read) \
+    fprintf(stdout, "[%s] write: %fs, read: %fs\n", \
+        name, TIMESPEC_TO_DOUBLE(write), TIMESPEC_TO_DOUBLE(read))
 
 static arg_t *arg_alloc(int fd, const char *path, size_t datablock, size_t iter) {
     arg_t *arg = (arg_t *) malloc(sizeof(arg_t));
@@ -50,7 +57,8 @@ static arg_t *arg_alloc(int fd, const char *path, size_t datablock, size_t iter)
     arg->path = path;
     arg->data_block = datablock;
     arg->iterations = iter;
-    arg->bench = -1;
+    arg->bench.tv_sec = -1;
+    arg->bench.tv_nsec = -1;
     arg->error = 0;
 
     return arg;
@@ -60,8 +68,10 @@ static arg_t *arg_alloc(int fd, const char *path, size_t datablock, size_t iter)
  * Function executed by the send_data process
  */
 static int send_data(arg_t *arg) {
+    struct timespec start;
     int wrote = 1, doclose = 0;
-    arg->bench = -1;
+    arg->bench.tv_sec = -1;
+    arg->bench.tv_nsec = -1;
     arg->error = 0;
 
     if (arg->path != NULL) {
@@ -79,7 +89,12 @@ static int send_data(arg_t *arg) {
         dummydata[i] = i;
     }
 
-    clock_t tic = clock();
+    /* Get current time */
+    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+        arg->error = errno;
+        if (doclose) close(arg->fd);
+        return 0;
+    }
 
     size_t i = 0;
     while(wrote > 0 && i < arg->iterations) {
@@ -87,12 +102,20 @@ static int send_data(arg_t *arg) {
         i++;
     }
 
-    clock_t toc = clock();
     if (wrote > 0) {
-        arg->bench = (double) (toc - tic) / CLOCKS_PER_SEC;
+        /* Get elapsed time from start to now */
+        arg->bench = elapsed_time(&start);
+        if (arg->bench.tv_sec == -1) {
+            arg->error = errno;
+            if (doclose) close(arg->fd);
+            return 0;
+        }
+    } else {
+        arg->bench.tv_sec = -1;
+        arg->bench.tv_nsec = -1;
+        arg->error = errno;
     }
 
-    if (wrote <= 0) arg->error = errno;
     if (doclose) close(arg->fd);
 
     return wrote;
@@ -102,8 +125,10 @@ static int send_data(arg_t *arg) {
  * Function executed by the consumer thread
  */
 static void *recv_data(void *arguments) {
+    struct timespec start;
     arg_t *arg = (arg_t*) arguments;
-    arg->bench = -1;
+    arg->bench.tv_sec = -1;
+    arg->bench.tv_nsec = -1;
     arg->error = 0;
     int read = 1, doclose = 0;
 
@@ -119,7 +144,12 @@ static void *recv_data(void *arguments) {
     size_t datalen = arg->data_block / sizeof(int);
     int data[datalen];
 
-    clock_t tic = clock();
+    /* Get current time */
+    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+        arg->error = errno;
+        if (doclose) close(arg->fd);
+        return 0;
+    }
 
     size_t i = 0;
     while(read > 0 && i < arg->iterations) {
@@ -127,12 +157,20 @@ static void *recv_data(void *arguments) {
         i++;
     }
 
-    clock_t toc = clock();
     if (read > 0) {
-        arg->bench = (double) (toc - tic) / CLOCKS_PER_SEC;
+        /* Get elapsed time from start to now */
+        arg->bench = elapsed_time(&start);
+        if (arg->bench.tv_nsec == -1) {
+            arg->error = errno;
+            if (doclose) close(arg->fd);
+            return 0;
+        }
+    } else {
+        arg->bench.tv_sec = -1;
+        arg->bench.tv_nsec = -1;
+        arg->error = errno;
     }
 
-    if (read < 0) arg->error = errno;
     if (doclose) close(arg->fd);
 
     return 0;

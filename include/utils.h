@@ -86,4 +86,12 @@ int msleep(int milliseconds);
  */
 int ipv4_address_to_array(const char *ipstr, int *res);
 
+/**
+ * Returns the elapsed time from the given start to now.
+ *
+ * @param start starting time
+ * @return elapsed time as struct timespec, -1 on error and sets errno
+ */
+struct timespec elapsed_time(struct timespec *start);
+
 #endif //UTILS_H
