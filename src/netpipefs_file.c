@@ -119,8 +119,6 @@ struct netpipefs_file *netpipefs_file_open(const char *path, int mode) {
         goto error;
     }
 
-    DEBUG("sent: OPEN %s %d\n", path, mode);
-
     /* wait for at least one writer and one reader */
     while (file->readers == 0 || file->writers == 0) {
         PTH(err, pthread_cond_wait(&(file->canopen), &(file->mtx)), netpipefs_file_unlock(file); goto error)
@@ -258,14 +256,15 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
 }
 
 int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
-    int err, bytes_wrote;
+    int err, bytes_wrote, canread;
     char *bufptr = buf;
 
     NOTZERO(netpipefs_file_lock(file), return -1)
 
     size_t remaining = size;
     size_t datagot;
-    while (remaining > 0 && file->writers > 0) {
+    canread = file->writers > 0 || cbuf_size(file->buffer) != 0;
+    while(remaining > 0 && canread) {
         /* file is empty. wait for data */
         while(cbuf_size(file->buffer) == 0 && file->writers > 0) {
             DEBUG("cannot read: file is empty\n");
@@ -273,7 +272,7 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
         }
 
         /* file is not empty */
-        if (file->writers > 0) {
+        if (cbuf_size(file->buffer) != 0) {
             datagot = cbuf_get(file->buffer, bufptr, remaining);
             remaining -= datagot;
             bufptr += datagot;
@@ -290,6 +289,8 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
 
             DEBUGFILE(file);
         }
+
+        canread = file->writers > 0 || cbuf_size(file->buffer) != 0;
     }
 
     /* return EOF if there are no writers */
