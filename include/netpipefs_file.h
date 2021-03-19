@@ -68,7 +68,7 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
 
 int netpipefs_file_recv(struct netpipefs_file *file);
 
-int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size);
+ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size);
 
 int netpipefs_file_read_update(struct netpipefs_file *file, size_t size);
 

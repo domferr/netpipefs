@@ -224,17 +224,21 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     NOTZERO(netpipefs_file_lock(file), return -1)
 
     size_t remaining = size;
-    size_t dataput;
+    ssize_t dataput;
     while (remaining > 0 && file->readers > 0) {
         /* file is full. wait for data */
         while(cbuf_size(file->buffer) == cbuf_capacity(file->buffer) && file->readers > 0) {
-            DEBUG("cannot write locally: file is full. Something is wrong!\n");
+            DEBUG("cannot write locally: file is full. SOMETHING IS WRONG!\n");
             PTH(err, pthread_cond_wait(&(file->isfull), &(file->mtx)), netpipefs_file_unlock(file); return -1)
         }
 
         /* file is not full */
         if (file->readers > 0) {
             dataput = cbuf_readn(netpipefs_socket.fd_skt, file->buffer, remaining);
+            if (dataput <= 0) {
+                netpipefs_file_unlock(file);
+                return -1;
+            }
             remaining -= dataput;
 
             /* wake up waiting readers */
@@ -255,7 +259,7 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     return size;
 }
 
-int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
+ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
     int err, bytes_wrote, canread;
     char *bufptr = buf;
 
@@ -293,15 +297,9 @@ int netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
         canread = file->writers > 0 || cbuf_size(file->buffer) != 0;
     }
 
-    /* return EOF if there are no writers */
-    if (remaining > 0 && file->writers == 0) {
-        NOTZERO(netpipefs_file_unlock(file), return -1)
-        return 0; //EOF
-    }
-
     NOTZERO(netpipefs_file_unlock(file), return -1)
 
-    return size;
+    return size - remaining;
 }
 
 int netpipefs_file_read_update(struct netpipefs_file *file, size_t size) {
