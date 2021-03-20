@@ -32,7 +32,7 @@ OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 TARGETS	= $(BINDIR)/netpipefs
 TESTS	= $(BINDIR)/utils.test $(BINDIR)/cbuf.test $(BINDIR)/openfiles.test
 
-.PHONY: all test clean cleanall mount_prod mount_cons debug_prod debug_cons usage run_test checkmount unmount
+.PHONY: all test clean cleanall usage run_test checkmount unmount forceunmount mount_prod mount_cons debug_prod debug_cons
 
 all: $(BINDIR) $(OBJDIR) $(INCDIR) $(TARGETS)
 
@@ -71,25 +71,6 @@ clean:
 cleanall: clean
 	\rm -f $(OBJDIR)/*.o *~ *.a *.sock
 
-PROD_PORT 			= 12345
-CONS_PORT 			= 6789
-PROD_HOST 			= localhost
-CONS_HOST 			= 127.0.0.1
-PROD_MOUNTPOINT 	= ./tmp/prod
-CONS_MOUNTPOINT 	= ./tmp/cons
-
-mount_prod: all
-	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 -s $(PROD_MOUNTPOINT)
-
-mount_cons: all
-	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=4096 -s $(CONS_MOUNTPOINT)
-
-debug_prod: all
-	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
-
-debug_cons: all
-	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=4096 -d -s $(CONS_MOUNTPOINT)
-
 # run with help flag
 usage: all
 	$(BINDIR)/netpipefs -h
@@ -108,3 +89,22 @@ unmount:
 forceunmount:
 	sudo umount -l $(PROD_MOUNTPOINT)
 	sudo umount -l $(CONS_MOUNTPOINT)
+
+PROD_PORT 			= 12345
+CONS_PORT 			= 6789
+PROD_HOST 			= localhost
+CONS_HOST 			= 127.0.0.1
+PROD_MOUNTPOINT 	= ./tmp/prod
+CONS_MOUNTPOINT 	= ./tmp/cons
+
+mount_prod: all
+	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 $(PROD_MOUNTPOINT)
+
+mount_cons: all
+	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=4096 $(CONS_MOUNTPOINT)
+
+debug_prod: all
+	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=2048 --timeout=6000 --debug -s $(PROD_MOUNTPOINT)
+
+debug_cons: all
+	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=4096 -d -s $(CONS_MOUNTPOINT)

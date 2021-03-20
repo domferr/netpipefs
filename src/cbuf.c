@@ -4,6 +4,14 @@
 #include <stdio.h>
 #include "../include/cbuf.h"
 
+struct cbuf_s {
+    char *data;
+    size_t head;
+    size_t tail;
+    size_t capacity;
+    int isfull;
+};
+
 cbuf_t *cbuf_alloc(size_t capacity) {
     if (capacity <= 0) {
         errno = EINVAL;
@@ -33,47 +41,39 @@ void cbuf_free(cbuf_t *cbuf) {
 }
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
-    size_t available = cbuf->capacity - cbuf_size(cbuf);
-    if (available == 0) return 0;
-    size_t willput = available < size ? available:size;
-
-    for(size_t i = 0; i<willput; i++) {
-        cbuf->data[cbuf->head] = *(data+i);
+    size_t put = 0;
+    while(put < size && !cbuf->isfull) {
+        cbuf->data[cbuf->head] = *(data+put);
         (cbuf->head)++;
         if (cbuf->head == cbuf->capacity) cbuf->head = 0;
+        put++;
+        cbuf->isfull = cbuf->head == cbuf->tail;
     }
-
-    cbuf->isfull = cbuf->head == cbuf->tail;
-
-    return willput;
+    return put;
 }
 
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
-    size_t willget = cbuf_size(cbuf) < size ? cbuf_size(cbuf):size;
-    if (willget == 0) return 0;
-
-    cbuf->isfull = 0;
-    for(size_t i = 0; i<willget; i++) {
-        *(data+i) = cbuf->data[cbuf->tail];
+    size_t got = 0;
+    while(got < size && !cbuf_empty(cbuf)) {
+        *(data+got) = cbuf->data[cbuf->tail];
         (cbuf->tail)++;
         if (cbuf->tail == cbuf->capacity) cbuf->tail = 0;
+        got++;
+        cbuf->isfull = 0;
     }
-
-    return willget;
+    return got;
 }
 
 ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n) {
     char *dataptr;
-    size_t available = cbuf->capacity - cbuf_size(cbuf);
 
     size_t linear_len;
     size_t   nleft;
     ssize_t  nread;
 
-    nleft = available < n ? available:n;
-    while (nleft > 0) {
-        if (cbuf->isfull) break;
-        else if (cbuf->head >= cbuf->tail) linear_len = cbuf->capacity - cbuf->head;
+    nleft = n;
+    while (nleft > 0 && !cbuf->isfull) {
+        if (cbuf->head >= cbuf->tail) linear_len = cbuf->capacity - cbuf->head;
         else linear_len = cbuf->tail - cbuf->head;
         if (linear_len > nleft) linear_len = nleft;
 
@@ -91,6 +91,14 @@ ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n) {
 
     return(n - nleft); /* return >= 0 */
 
+}
+
+int cbuf_full(cbuf_t *cbuf) {
+    return cbuf->isfull;
+}
+
+int cbuf_empty(cbuf_t *cbuf) {
+    return !cbuf->isfull && (cbuf->head == cbuf->tail);
 }
 
 size_t cbuf_size(cbuf_t *cbuf) {
