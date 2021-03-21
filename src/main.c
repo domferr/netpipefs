@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <signal.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
 #include "../include/dispatcher.h"
@@ -21,8 +22,10 @@
 struct netpipefs_options netpipefs_options;
 /* Socket communication */
 struct netpipefs_socket netpipefs_socket;
-/* Dispatcher thread */
-struct dispatcher *dispatcher = NULL;
+/* Fuse channel. Used to mount and unmount */
+struct fuse_chan *ch;
+/* Thread signal handler */
+pthread_t sig_handler_tid;
 
 /**
  * Compares the given ip addresses and returns 1, 0 or -1 if the first is greater or equal or less than the second.
@@ -103,6 +106,52 @@ static int establish_socket_connection(long timeout) {
     return -1;
 }
 
+static void *signal_handler_thread(void *arg) {
+    sigset_t *set = arg;
+    int err, sig;
+
+    // wait for SIGINT or SIGTERM
+    PTHERR(err, sigwait(set, &sig), return NULL)
+
+    // TODO close all files
+
+    // unmount the filesystem
+    fuse_unmount(netpipefs_options.mountpoint, ch);
+
+    return 0;
+}
+
+static int netpipefs_set_signal_handlers(sigset_t *set) {
+    int err;
+
+    /* Set SIGINT, SIGTERM */
+    MINUS1(sigemptyset(set), return -1)
+    MINUS1(sigaddset(set, SIGINT), return -1)
+    MINUS1(sigaddset(set, SIGTERM), return -1)
+    MINUS1(sigaddset(set, SIGPIPE), return -1)
+
+    /* Block SIGINT, SIGTERM and SIGPIPE for main thread */
+    PTH(err, pthread_sigmask(SIG_BLOCK, set, NULL), return -1)
+
+    /* Do not handle SIGPIPE */
+    MINUS1(sigdelset(set, SIGPIPE), return -1)
+
+    /* Run signal handler thread */
+    PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
+
+    /* Detach signal handler thread */
+    PTH(err, pthread_detach(sig_handler_tid), return -1)
+
+    return 0;
+}
+
+static int netpipefs_remove_signal_handlers(void) {
+    int err;
+    // Send SIGINT to stop the thread
+    PTH(err, pthread_kill(sig_handler_tid, SIGINT), return -1)
+    return 0;
+}
+
 /**
  * Initialize filesystem
  *
@@ -111,30 +160,42 @@ static int establish_socket_connection(long timeout) {
  * parameter to the destroy() method. It overrides the initial
  * value provided to fuse_main() / fuse_new().
  */
-// Undocumented but extraordinarily useful fact:  the fuse_context is
-// set up before this function is called, and
-// fuse_get_context()->private_data returns the user_data passed to
-// fuse_main().  Really seems like either it should be a third
-// parameter coming in here, or else the fact should be documented
-// (and this might as well return void, as it did in older versions of
-// FUSE).
 static void* init_callback(struct fuse_conn_info *conn) {
+    /* Useful fact: the fuse_context is set up before this function is called, and fuse_get_context()->private_data
+     * returns the user_data passed to fuse_main(). */
     struct fuse *fuse = fuse_get_context()->fuse;
-    DEBUG("init() callback\n");
-    DEBUG("remote pipe capacity: %ld\n", netpipefs_socket.remotepipecapacity);
+    int err;
+    if (netpipefs_options.delayconnect) {
+        /* Connect */
+        err = establish_socket_connection(netpipefs_options.timeout);
+        if (err == -1) {
+            perror("unable to establish socket communication");
+            fuse_exit(fuse);
+            return 0;
+        }
+    }
 
     /* Create open files table */
     if (netpipefs_open_files_table_init() == -1) {
         perror("failed to create file table");
         fuse_exit(fuse);
+        return 0;
     }
 
     /* Run dispatcher */
-    dispatcher = netpipefs_dispatcher_run();
-    if (dispatcher == NULL) {
+    err = netpipefs_dispatcher_run();
+    if (err == -1) {
         perror("failed to run dispatcher");
         fuse_exit(fuse);
+        return 0;
     }
+
+    /* Print a resume */
+    DEBUG("dispatcher running\n");
+    DEBUG("connection established\n");
+    DEBUG("host=%s:%d\n", netpipefs_options.hostip, netpipefs_options.hostport);
+    DEBUG("local port=%d\n", (netpipefs_socket.port == -1 ? netpipefs_options.port:netpipefs_socket.port));
+    DEBUG("remote pipe capacity=%ld\n", netpipefs_socket.remotepipecapacity);
 
     return 0;
 }
@@ -148,20 +209,15 @@ static void destroy_callback(void *privatedata) {
     int err;
     DEBUG("destroy() callback\n");
 
-    /* Stop and join dispatcher thread */
-    if (dispatcher != NULL) {
-        MINUS1(netpipefs_dispatcher_stop(dispatcher), perror("failed to stop dispatcher thread"))
-        MINUS1(netpipefs_dispatcher_join(dispatcher, NULL), perror("failed to join dispatcher thread"))
-        netpipefs_dispatcher_free(dispatcher);
-    }
+    /* Stop dispatcher thread */
+    MINUS1(netpipefs_dispatcher_stop(), perror("failed to stop dispatcher thread"))
 
     /* Destroy open files table */
     MINUS1(netpipefs_open_files_table_destroy(), perror("failed to destroy file table"))
 
     /* Destroy socket and socket's mutex */
-    if (netpipefs_socket.port != -1 && netpipefs_socket.fd_skt != -1) {
+    if (netpipefs_socket.port != -1)
         MINUS1(socket_destroy(netpipefs_socket.fd_skt, netpipefs_socket.port),perror("failed to close socket connection"))
-    }
     PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writemtx)), perror("failed to destroy socket's mutex"))
 }
 
@@ -242,12 +298,13 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
         DEBUG("both read and write access is not allowed\n");
         return -EINVAL;
     }
+    printf("caller pid %d\n", fuse_get_context()->pid);
 
     file = netpipefs_file_open(path, mode);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
-    fi->direct_io = 1; // avoid kernel caching
+    fi->direct_io = 1;   // avoid kernel caching
     fi->nonseekable = 1; // seeking will not be allowed
 
     return 0;
@@ -279,6 +336,7 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  * this operation.
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    //path is NULL because flag_nullpath_ok = 1
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
     int bytes = netpipefs_file_read(file, buf, size);
@@ -296,6 +354,7 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  * expected to reset the setuid and setgid bits.
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    //path is NULL because flag_nullpath_ok = 1
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
     int bytes = netpipefs_file_send(file, buf, size);
@@ -316,6 +375,7 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
  * file.  The return value of release is ignored.
  */
 static int release_callback(const char *path, struct fuse_file_info *fi) {
+    //path is NULL because flag_nullpath_ok = 1
     int mode = fi->flags & O_ACCMODE;
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
 
@@ -345,6 +405,7 @@ static int truncate_callback(const char *path, off_t newsize) {
  * '1'.
  */
 static int readdir_callback(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    //path is NULL because flag_nullpath_ok = 1
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
     return 0;
@@ -360,7 +421,14 @@ static const struct fuse_operations netpipefs_oper = {
     .write = write_callback,
     .release = release_callback,
     .truncate = truncate_callback,
-    .readdir = readdir_callback
+    .readdir = readdir_callback,
+    /* The following operations will not receive path information:
+	 * read, write, flush, release, fallocate, fsync, readdir,
+	 * releasedir, fsyncdir, lock, ioctl and poll.
+     * They will depend on the fuse_file_info structure's fh value instead.
+     */
+    .flag_nullpath_ok = 1,
+    .flag_nopath = 1
 };
 
 int main(int argc, char** argv) {
@@ -374,24 +442,65 @@ int main(int argc, char** argv) {
         return ret == -1 ? EXIT_FAILURE:EXIT_SUCCESS;
     }
 
-    /* Remember that socket is not connected */
-    netpipefs_socket.fd_skt = -1;
-    netpipefs_socket.port = -1;
-
-    /* Connect via socket */
+    /* Init socket mutex */
     PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writemtx), NULL), netpipefs_opt_free(&args); return EXIT_FAILURE)
-    if (establish_socket_connection(netpipefs_options.timeout) == -1) {
-        perror("unable to establish socket communication");
-        netpipefs_opt_free(&args);
-        return EXIT_FAILURE;
+    if (!netpipefs_options.delayconnect) {
+        /* Connect before mounting */
+        ret = establish_socket_connection(netpipefs_options.timeout);
+        if (ret == -1) {
+            perror("unable to establish socket communication");
+            netpipefs_opt_free(&args);
+            return EXIT_FAILURE;
+        }
+    }
+
+    /* Mount the filesystem */
+    ch = fuse_mount(netpipefs_options.mountpoint, &args);
+    if (ch == NULL) {
+        perror("unable to mount the file system");
+        goto cleanup;
+    }
+
+    /* Initialize FUSE */
+    struct fuse *fuse = fuse_new(ch, &args, &netpipefs_oper, sizeof(struct fuse_operations), NULL);
+    if(fuse == NULL) {
+        perror("unable to initialize FUSE");
+        fuse_unmount(netpipefs_options.mountpoint, ch);
+        goto cleanup;
+    }
+
+    /* Run the filesystem in foreground or background */
+    ret = fuse_daemonize(netpipefs_options.foreground);
+    if (ret == -1) {
+        perror("failed to run the filesystem in foreground or background");
+        fuse_unmount(netpipefs_options.mountpoint, ch);
+        goto cleanup;
+    }
+
+    /* Handle signals */
+    sigset_t set;
+    if (netpipefs_set_signal_handlers(&set) == -1) {
+        perror("failed to run signal handler thread");
+        fuse_unmount(netpipefs_options.mountpoint, ch);
+        goto cleanup;
     }
 
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
-    ret = fuse_main(args.argc, args.argv, &netpipefs_oper, NULL);
-    if (ret == EXIT_FAILURE) perror("fuse_main()");
+    if (netpipefs_options.multithreaded)
+        ret = fuse_loop_mt(fuse);
+    else
+        ret = fuse_loop(fuse);
+
+    if (ret != 0) perror("fuse loop");
 
     DEBUG("main cleanup\n");
-    netpipefs_opt_free(&args);
 
-    return ret;
+cleanup:
+    netpipefs_remove_signal_handlers();
+    fuse_destroy(fuse);
+    netpipefs_opt_free(&args);
+    free(netpipefs_options.mountpoint);
+
+    return ret != 0 ? EXIT_FAILURE:EXIT_SUCCESS;
+
 }

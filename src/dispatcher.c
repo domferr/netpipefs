@@ -14,6 +14,11 @@
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
+static struct dispatcher {
+    pthread_t tid;  // dispatcher's thread id
+    int pipefd[2];  // used to communicate with main thread
+} dispatcher;
+
 extern struct netpipefs_socket netpipefs_socket;
 
 static int on_open(char *path) {
@@ -80,22 +85,20 @@ static int on_read(char *path) {
 
 static void *netpipefs_dispatcher_fun(void *args) {
     int bytes = 1, err, run = 1, nfds;
-    struct dispatcher *dispatcher = (struct dispatcher *) args;
-    DEBUG("%s\n", "dispatcher - running");
 
     fd_set set, rd_set;
     FD_ZERO(&set);
     FD_SET(netpipefs_socket.fd_skt, &set);
-    FD_SET(dispatcher->pipefd[0], &set);
-    nfds = netpipefs_socket.fd_skt > dispatcher->pipefd[0] ? netpipefs_socket.fd_skt:dispatcher->pipefd[0];
+    FD_SET(dispatcher.pipefd[0], &set);
+    nfds = netpipefs_socket.fd_skt > dispatcher.pipefd[0] ? netpipefs_socket.fd_skt:dispatcher.pipefd[0];
 
     while(run) {
         rd_set = set;
         err = select(nfds+1, &rd_set, NULL, NULL, NULL);
         if (err == -1) { // an error occurred then stop running
-            perror("dispatcher - select() failed");
+            perror("dispatcher. select() failed");
             run = 0;
-        } else if (FD_ISSET(dispatcher->pipefd[0], &rd_set)) {  // pipe can be read then stop running
+        } else if (FD_ISSET(dispatcher.pipefd[0], &rd_set)) {  // pipe can be read then stop running
             run = 0;
         } else {    // can read from socket
             enum netpipefs_header header;
@@ -130,35 +133,30 @@ static void *netpipefs_dispatcher_fun(void *args) {
         }
     }
     if (bytes == 0)
-        DEBUG("%s\n", "dispatcher - socket connection lost");
-    DEBUG("%s\n", "dispatcher - stopped running");
+        DEBUG("dispatcher has lost socket connection\n");
+
     return 0;
 }
 
-struct dispatcher *netpipefs_dispatcher_run(void) {
-    struct dispatcher *dispatcher = (struct dispatcher*) malloc(sizeof(struct dispatcher));
-    EQNULL(dispatcher, return NULL)
+int netpipefs_dispatcher_run(void) {
+    int err;
+    MINUS1(pipe(dispatcher.pipefd), return -1)
 
-    MINUS1(pipe(dispatcher->pipefd), return NULL)
+    PTH(err, pthread_create(&(dispatcher.tid), NULL, &netpipefs_dispatcher_fun, NULL), return -1)
 
-    if (pthread_create(&(dispatcher->tid), NULL, &netpipefs_dispatcher_fun, dispatcher) != 0) {
-        free(dispatcher);
-        return NULL;
-    }
-
-    return dispatcher;
+    return 0;
 }
 
-int netpipefs_dispatcher_stop(struct dispatcher *dispatcher) {
-    return close(dispatcher->pipefd[1]);
-}
+int netpipefs_dispatcher_stop(void) {
+    int err;
 
-int netpipefs_dispatcher_join(struct dispatcher *dispatcher, void *ret) {
-    int r;
-    PTH(r, pthread_join(dispatcher->tid, ret), return -1)
-    return close(dispatcher->pipefd[0]);
-}
+    /* Close write end. Dispatcher will wake up and stop running */
+    MINUS1(close(dispatcher.pipefd[1]), return -1)
+    PTH(err, pthread_join(dispatcher.tid, NULL), return -1)
+    DEBUG("dispatcher stopped running\n");
 
-void netpipefs_dispatcher_free(struct dispatcher *dispatcher) {
-    free(dispatcher);
+    /* Close the read end of the pipe */
+    close(dispatcher.pipefd[0]);
+
+    return 0;
 }

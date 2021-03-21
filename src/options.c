@@ -15,7 +15,6 @@
 static const struct fuse_opt netpipefs_opts[] = {
         NETPIPEFS_OPT("-h",                 show_help, 1),
         NETPIPEFS_OPT("--help",             show_help, 1),
-        NETPIPEFS_OPT("-s",                 singlethreaded, 1),
         NETPIPEFS_OPT("-d",                 debug, 1),
         NETPIPEFS_OPT("--debug",            debug, 1),
         NETPIPEFS_OPT("-p %i",              port, 0),
@@ -24,21 +23,26 @@ static const struct fuse_opt netpipefs_opts[] = {
         NETPIPEFS_OPT("--hostip=%s",        hostip, 0),
         NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
         NETPIPEFS_OPT("--pipecapacity=%i",  pipecapacity, 0),
+        NETPIPEFS_OPT("-delayconnect",      delayconnect, 1),
 
         FUSE_OPT_END
 };
 
 int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     /* Set defaults */
+    netpipefs_options.mountpoint = NULL;
+    netpipefs_options.multithreaded = 1;
+    netpipefs_options.foreground = 0;
     netpipefs_options.timeout = DEFAULT_TIMEOUT;
     netpipefs_options.port = DEFAULT_PORT;
     netpipefs_options.hostip = NULL;
     netpipefs_options.hostport = DEFAULT_PORT;
     netpipefs_options.pipecapacity = DEFAULT_PIPE_CAPACITY;
-    netpipefs_options.singlethreaded = 0;
+    netpipefs_options.delayconnect = 0;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
+    MINUS1(fuse_parse_cmdline(args, &netpipefs_options.mountpoint, &netpipefs_options.multithreaded, &netpipefs_options.foreground), return -1)
 
     /* When --help is specified, first print usage text, then exit with success */
     if (netpipefs_options.show_help) {
@@ -78,18 +82,21 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     /* Check for debug flag */
     if (netpipefs_options.debug) {
         MINUS1ERR(fuse_opt_add_arg(args, "-d"),  return -1)
-    }
-
-    /* Check for singlethreaded flag */
-    if (netpipefs_options.singlethreaded) {
-        MINUS1ERR(fuse_opt_add_arg(args, "-s"),  return -1)
+        netpipefs_options.foreground = 1;
     }
 
     return 0;
 }
 
 void netpipefs_opt_free(struct fuse_args *args) {
-    if (netpipefs_options.hostip) free((void*) netpipefs_options.hostip);
+    if (netpipefs_options.hostip) {
+        free((void*) netpipefs_options.hostip);
+        netpipefs_options.hostip = NULL;
+    }
+    if (netpipefs_options.mountpoint) {
+        free((void*) netpipefs_options.mountpoint);
+        netpipefs_options.mountpoint = NULL;
+    }
     fuse_opt_free_args(args);
 }
 

@@ -12,14 +12,17 @@
  * Command line options
  */
 struct netpipefs_options {
+    char *mountpoint;
     int show_help;
     int debug;
+    int multithreaded;
+    int foreground;
     long timeout;
-    size_t pipecapacity;
     int port;
     char *hostip;
     int hostport;
-    int singlethreaded;
+    int delayconnect;
+    size_t pipecapacity;
 };
 
 extern struct netpipefs_options netpipefs_options;
@@ -33,7 +36,7 @@ extern struct netpipefs_options netpipefs_options;
  * @param progname program's name
  * @param args it will be filled with the arguments that will be passed to FUSE
  *
- * @return
+ * @return -1 on error, 0 if the options are correct, 1 if the options are not correct and prints the error
  */
 int netpipefs_opt_parse(const char *progname, struct fuse_args *args);
 
