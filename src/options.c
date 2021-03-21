@@ -112,6 +112,7 @@ void netpipefs_usage(const char *progname) {
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
            "    --pipecapacity=<d>     max network pipe capacity (default: %d)\n"
+           "    -delayconnect          connect to host after the filesystem is mounted\n"
            "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT, DEFAULT_PIPE_CAPACITY);
     fuse_usage();
 }
