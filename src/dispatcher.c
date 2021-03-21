@@ -14,10 +14,12 @@
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
-static struct dispatcher {
+struct dispatcher {
     pthread_t tid;  // dispatcher's thread id
     int pipefd[2];  // used to communicate with main thread
-} dispatcher;
+};
+
+struct dispatcher dispatcher = {0, {-1,-1} };
 
 extern struct netpipefs_socket netpipefs_socket;
 
@@ -149,14 +151,18 @@ int netpipefs_dispatcher_run(void) {
 
 int netpipefs_dispatcher_stop(void) {
     int err;
+    if (dispatcher.pipefd[1] == -1) return 0; // already stopped
 
     /* Close write end. Dispatcher will wake up and stop running */
     MINUS1(close(dispatcher.pipefd[1]), return -1)
+    dispatcher.pipefd[1] = -1;
+
     PTH(err, pthread_join(dispatcher.tid, NULL), return -1)
     DEBUG("dispatcher stopped running\n");
 
     /* Close the read end of the pipe */
     close(dispatcher.pipefd[0]);
+    dispatcher.pipefd[0] = -1;
 
     return 0;
 }

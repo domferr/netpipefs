@@ -48,6 +48,7 @@ static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondp
 static int establish_socket_connection(long timeout) {
     int err, fd_server, fd_accepted, fd_skt;
     char *host_received = NULL;
+    netpipefs_socket.port = -1; // not connected
     size_t host_len = strlen(netpipefs_options.hostip);
     if (host_len == 0) return -1;
 
@@ -139,7 +140,6 @@ static int netpipefs_set_signal_handlers(sigset_t *set) {
     /* Run signal handler thread */
     PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
 
-    /* Detach signal handler thread */
     PTH(err, pthread_detach(sig_handler_tid), return -1)
 
     return 0;
@@ -147,8 +147,14 @@ static int netpipefs_set_signal_handlers(sigset_t *set) {
 
 static int netpipefs_remove_signal_handlers(void) {
     int err;
+
     // Send SIGINT to stop the thread
-    PTH(err, pthread_kill(sig_handler_tid, SIGINT), return -1)
+    if ((err = pthread_kill(sig_handler_tid, SIGINT)) != 0) {
+        if (err == ESRCH) return 0; // already ended
+        errno = err;
+        return -1;
+    }
+
     return 0;
 }
 
@@ -195,7 +201,8 @@ static void* init_callback(struct fuse_conn_info *conn) {
     DEBUG("connection established\n");
     DEBUG("host=%s:%d\n", netpipefs_options.hostip, netpipefs_options.hostport);
     DEBUG("local port=%d\n", (netpipefs_socket.port == -1 ? netpipefs_options.port:netpipefs_socket.port));
-    DEBUG("remote pipe capacity=%ld\n", netpipefs_socket.remotepipecapacity);
+    DEBUG("local pipe capacity=%ld\n", netpipefs_options.pipecapacity);
+    DEBUG("host pipe capacity=%ld\n", netpipefs_socket.remotepipecapacity);
 
     return 0;
 }
@@ -422,13 +429,13 @@ static const struct fuse_operations netpipefs_oper = {
     .release = release_callback,
     .truncate = truncate_callback,
     .readdir = readdir_callback,
-    /* The following operations will not receive path information:
-	 * read, write, flush, release, fallocate, fsync, readdir,
-	 * releasedir, fsyncdir, lock, ioctl and poll.
-     * They will depend on the fuse_file_info structure's fh value instead.
-     */
     .flag_nullpath_ok = 1,
     .flag_nopath = 1
+    /* The following operations will not receive path information:
+     * read, write, flush, release, fallocate, fsync, readdir,
+     * releasedir, fsyncdir, lock, ioctl and poll.
+     * They will depend on the fuse_file_info structure's fh value instead.
+     */
 };
 
 int main(int argc, char** argv) {
@@ -444,6 +451,7 @@ int main(int argc, char** argv) {
 
     /* Init socket mutex */
     PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writemtx), NULL), netpipefs_opt_free(&args); return EXIT_FAILURE)
+
     if (!netpipefs_options.delayconnect) {
         /* Connect before mounting */
         ret = establish_socket_connection(netpipefs_options.timeout);
@@ -457,8 +465,8 @@ int main(int argc, char** argv) {
     /* Mount the filesystem */
     ch = fuse_mount(netpipefs_options.mountpoint, &args);
     if (ch == NULL) {
-        perror("unable to mount the file system");
-        goto cleanup;
+        ret = -1;
+        goto end;
     }
 
     /* Initialize FUSE */
@@ -466,7 +474,7 @@ int main(int argc, char** argv) {
     if(fuse == NULL) {
         perror("unable to initialize FUSE");
         fuse_unmount(netpipefs_options.mountpoint, ch);
-        goto cleanup;
+        goto end;
     }
 
     /* Run the filesystem in foreground or background */
@@ -474,7 +482,7 @@ int main(int argc, char** argv) {
     if (ret == -1) {
         perror("failed to run the filesystem in foreground or background");
         fuse_unmount(netpipefs_options.mountpoint, ch);
-        goto cleanup;
+        goto destroy;
     }
 
     /* Handle signals */
@@ -482,9 +490,10 @@ int main(int argc, char** argv) {
     if (netpipefs_set_signal_handlers(&set) == -1) {
         perror("failed to run signal handler thread");
         fuse_unmount(netpipefs_options.mountpoint, ch);
-        goto cleanup;
+        goto destroy;
     }
 
+    DEBUG("loop\n");
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
     if (netpipefs_options.multithreaded)
         ret = fuse_loop_mt(fuse);
@@ -495,9 +504,11 @@ int main(int argc, char** argv) {
 
     DEBUG("main cleanup\n");
 
-cleanup:
-    netpipefs_remove_signal_handlers();
+    if (netpipefs_remove_signal_handlers() == -1) perror("unable to stop signal handler");
+
+destroy:
     fuse_destroy(fuse);
+end:
     netpipefs_opt_free(&args);
     free(netpipefs_options.mountpoint);
 
