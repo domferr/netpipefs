@@ -51,6 +51,7 @@ To run the test suite first build the tests by running ``make test`` and finally
 | `--pipecapaciy=CAPACITY` | Maximum network pipe size |
 | `-f` | Do not daemonize, stay in foreground |
 | `-s` | Single threaded operation |
+| `-delayconnect` | Connect to host after the filesystem is mounted |
 
 NetpipeFS also accepts several options common to all FUSE file systems. See the [FUSE official repository](http://github.com/libfuse/libfuse) for further information.
 
