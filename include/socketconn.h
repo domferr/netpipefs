@@ -1,6 +1,8 @@
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 
+#include <sys/un.h>
+
 #define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
 #define CONNECT_INTERVAL 1000   // Ogni quanti millisecondi riprovare la connect se fallisce
@@ -25,18 +27,19 @@ int socket_listen(int port);
  */
 int socket_accept(int fd_skt, long timeout);
 
-/**
+/** TODO this doc
  * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di CONNECT_INTERVAL
  * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
  * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
  *
  * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
  * tempo di default DEFAULT_TIMEOUT
+ *
  * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
  */
-int socket_connect(int port, long timeout);
+int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout);
 
-/**
+/** TODO this doc
  * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di CONNECT_INTERVAL
  * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
  * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
@@ -46,7 +49,7 @@ int socket_connect(int port, long timeout);
  *
  * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
  */
-int socket_connect_interval(int fd_skt, int port, long timeout);
+int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout);
 
 /**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned

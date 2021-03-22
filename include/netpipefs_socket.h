@@ -17,6 +17,10 @@ enum netpipefs_header {
     WRITE
 };
 
+int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long timeout);
+
+int end_socket_connection(struct netpipefs_socket *netpipefs_socket);
+
 /**
  * Read from socket the header and sets the header pointer and the path pointer
  *

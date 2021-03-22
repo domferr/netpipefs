@@ -5,9 +5,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <sys/socket.h>
 #include <signal.h>
 #include "../include/utils.h"
 #include "../include/socketconn.h"
@@ -15,7 +13,6 @@
 #include "../include/options.h"
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
-#include "../include/scfiles.h"
 #include "../include/netpipefs_socket.h"
 
 /* Command line options */
@@ -26,86 +23,6 @@ struct netpipefs_socket netpipefs_socket;
 struct fuse_chan *ch;
 /* Thread signal handler */
 pthread_t sig_handler_tid;
-
-/**
- * Compares the given ip addresses and returns 1, 0 or -1 if the first is greater or equal or less than the second.
- * If the two ip addresses are equal then returns 1, 0 or -1 if firstport greater or equal or less than secondport.
- * If the ip addresses are not valid then 0 is returned.
- */
-static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondport) {
-    int firstaddr[4], secondaddr[4];
-
-    MINUS1(ipv4_address_to_array(firsthost, firstaddr), return 0)
-    MINUS1(ipv4_address_to_array(secondhost, secondaddr), return 0)
-
-    for (int i = 0; i < 4; i++) {
-        if (firstaddr[i] != secondaddr[i]) return firstaddr[i] - secondaddr[i];
-    }
-
-    return firstport - secondport;
-}
-
-static int establish_socket_connection(long timeout) {
-    int err, fd_server, fd_accepted, fd_skt;
-    char *host_received = NULL;
-    netpipefs_socket.port = -1; // not connected
-    size_t host_len = strlen(netpipefs_options.hostip);
-    if (host_len == 0) return -1;
-
-    MINUS1(fd_server = socket_listen(netpipefs_options.port), return -1)
-    MINUS1(fd_skt = socket(AF_UNIX, SOCK_STREAM, 0), socket_destroy(fd_server, netpipefs_options.port); return -1)
-
-    /* try to connect */
-    MINUS1(socket_connect_interval(fd_skt, netpipefs_options.hostport, timeout), close(fd_skt); socket_destroy(fd_server, netpipefs_options.port); return -1)
-
-    /* try to accept */
-    MINUS1(fd_accepted = socket_accept(fd_server, timeout), goto error)
-
-    /* send host */
-    err = socket_write_h(fd_skt, (void*) netpipefs_options.hostip, sizeof(char)*(1+host_len));
-    if (err <= 0) goto error;
-
-    /* read other host */
-    err = socket_read_h(fd_accepted, (void**) &host_received);
-    if (err <= 0) goto error;
-
-    /* compare the hosts */
-    int comparison = hostcmp(netpipefs_options.hostip, netpipefs_options.port, host_received, netpipefs_options.hostport);
-    if (comparison > 0) {
-        MINUS1(close(fd_skt), goto error)
-        // not needed to accept other connections anymore
-        MINUS1(close(fd_server), goto error)
-        netpipefs_socket.fd_skt = fd_accepted;
-        netpipefs_socket.port  = netpipefs_options.port;
-    } else if (comparison < 0) {
-        // not needed to accept other connections anymore
-        MINUS1(close(fd_accepted), goto error)
-        MINUS1(socket_destroy(fd_server, netpipefs_options.port), goto error)
-        netpipefs_socket.fd_skt = fd_skt;
-        netpipefs_socket.port  = -1;
-    } else {
-        errno = EINVAL;
-        goto error;
-    }
-
-    /* send local pipe capacity */
-    err = writen(netpipefs_socket.fd_skt, &netpipefs_options.pipecapacity, sizeof(size_t));
-    if (err <= 0) goto error;
-
-    /* read remote pipe capacity */
-    err = readn(netpipefs_socket.fd_skt, &netpipefs_socket.remotepipecapacity, sizeof(size_t));
-    if (err <= 0) goto error;
-
-    free(host_received);
-    return 0;
-
-    error:
-    if (fd_accepted != -1) close(fd_accepted);
-    socket_destroy(fd_server, netpipefs_options.port);
-    socket_destroy(fd_skt, netpipefs_options.hostport);
-    if (host_received) free(host_received);
-    return -1;
-}
 
 static void *signal_handler_thread(void *arg) {
     sigset_t *set = arg;
@@ -140,7 +57,7 @@ static int netpipefs_set_signal_handlers(sigset_t *set) {
     /* Run signal handler thread */
     PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
 
-    PTH(err, pthread_detach(sig_handler_tid), return -1)
+    //PTH(err, pthread_detach(sig_handler_tid), return -1)
 
     return 0;
 }
@@ -155,6 +72,7 @@ static int netpipefs_remove_signal_handlers(void) {
         return -1;
     }
 
+    PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
     return 0;
 }
 
@@ -173,7 +91,7 @@ static void* init_callback(struct fuse_conn_info *conn) {
     int err;
     if (netpipefs_options.delayconnect) {
         /* Connect */
-        err = establish_socket_connection(netpipefs_options.timeout);
+        err = establish_socket_connection(&netpipefs_socket, netpipefs_options.timeout);
         if (err == -1) {
             perror("unable to establish socket communication");
             fuse_exit(fuse);
@@ -217,14 +135,17 @@ static void destroy_callback(void *privatedata) {
     DEBUG("destroy() callback\n");
 
     /* Stop dispatcher thread */
-    MINUS1(netpipefs_dispatcher_stop(), perror("failed to stop dispatcher thread"))
+    err = netpipefs_dispatcher_stop();
+    if (err == -1) perror("failed to stop dispatcher thread");
 
     /* Destroy open files table */
-    MINUS1(netpipefs_open_files_table_destroy(), perror("failed to destroy file table"))
+    err = netpipefs_open_files_table_destroy();
+    if (err == -1) perror("failed to destroy file table");
 
     /* Destroy socket and socket's mutex */
-    if (netpipefs_socket.port != -1)
-        MINUS1(socket_destroy(netpipefs_socket.fd_skt, netpipefs_socket.port),perror("failed to close socket connection"))
+    err = end_socket_connection(&netpipefs_socket);
+    if (err == -1) perror("failed to close socket connection");
+
     PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writemtx)), perror("failed to destroy socket's mutex"))
 }
 
@@ -454,7 +375,7 @@ int main(int argc, char** argv) {
 
     if (!netpipefs_options.delayconnect) {
         /* Connect before mounting */
-        ret = establish_socket_connection(netpipefs_options.timeout);
+        ret = establish_socket_connection(&netpipefs_socket, netpipefs_options.timeout);
         if (ret == -1) {
             perror("unable to establish socket communication");
             netpipefs_opt_free(&args);
@@ -493,19 +414,17 @@ int main(int argc, char** argv) {
         goto destroy;
     }
 
-    DEBUG("loop\n");
     /* Run fuse loop. Block until CTRL+C or fusermount -u */
     if (netpipefs_options.multithreaded)
         ret = fuse_loop_mt(fuse);
     else
         ret = fuse_loop(fuse);
 
-    if (ret != 0) perror("fuse loop");
+    if (ret != 0)
+        perror("fuse loop");
 
-    DEBUG("main cleanup\n");
-
-    if (netpipefs_remove_signal_handlers() == -1) perror("unable to stop signal handler");
-
+    if (netpipefs_remove_signal_handlers() == -1)
+        perror("unable to stop signal handler");
 destroy:
     fuse_destroy(fuse);
 end:
