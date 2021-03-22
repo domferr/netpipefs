@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct netpipefs_options netpipefs_options;
+
 #define NETPIPEFS_OPT(t, p, v) { t, offsetof(struct netpipefs_options, p), v }
 
 /**

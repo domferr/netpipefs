@@ -1,79 +1,19 @@
-#define FUSE_USE_VERSION 29 //fuse version 2.9. Needed by fuse.h
-
+#include "../include/options.h"
 #include <fuse.h>
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <signal.h>
+#include "../include/signal_handler.h"
 #include "../include/utils.h"
 #include "../include/dispatcher.h"
-#include "../include/options.h"
 #include "../include/netpipefs_file.h"
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
-/* Command line options */
-struct netpipefs_options netpipefs_options;
 /* Socket communication */
 struct netpipefs_socket netpipefs_socket;
-/* Fuse channel. Used to mount and unmount */
-struct fuse_chan *ch;
-/* Thread signal handler */
-pthread_t sig_handler_tid;
-
-static void *signal_handler_thread(void *arg) {
-    sigset_t *set = arg;
-    int err, sig;
-
-    // wait for SIGINT or SIGTERM
-    PTHERR(err, sigwait(set, &sig), return NULL)
-
-    // TODO close all files
-
-    // unmount the filesystem
-    fuse_unmount(netpipefs_options.mountpoint, ch);
-
-    return 0;
-}
-
-static int netpipefs_set_signal_handlers(sigset_t *set) {
-    int err;
-
-    /* Set SIGINT, SIGTERM */
-    MINUS1(sigemptyset(set), return -1)
-    MINUS1(sigaddset(set, SIGINT), return -1)
-    MINUS1(sigaddset(set, SIGTERM), return -1)
-    MINUS1(sigaddset(set, SIGPIPE), return -1)
-
-    /* Block SIGINT, SIGTERM and SIGPIPE for main thread */
-    PTH(err, pthread_sigmask(SIG_BLOCK, set, NULL), return -1)
-
-    /* Do not handle SIGPIPE */
-    MINUS1(sigdelset(set, SIGPIPE), return -1)
-
-    /* Run signal handler thread */
-    PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
-
-    //PTH(err, pthread_detach(sig_handler_tid), return -1)
-
-    return 0;
-}
-
-static int netpipefs_remove_signal_handlers(void) {
-    int err;
-
-    // Send SIGINT to stop the thread
-    if ((err = pthread_kill(sig_handler_tid, SIGINT)) != 0) {
-        if (err == ESRCH) return 0; // already ended
-        errno = err;
-        return -1;
-    }
-
-    PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
-    return 0;
-}
 
 /**
  * Initialize filesystem
@@ -383,7 +323,7 @@ int main(int argc, char** argv) {
     }
 
     /* Mount the filesystem */
-    ch = fuse_mount(netpipefs_options.mountpoint, &args);
+    struct fuse_chan *ch = fuse_mount(netpipefs_options.mountpoint, &args);
     if (ch == NULL) {
         ret = -1;
         goto end;
@@ -407,7 +347,7 @@ int main(int argc, char** argv) {
 
     /* Handle signals */
     sigset_t set;
-    if (netpipefs_set_signal_handlers(&set) == -1) {
+    if (netpipefs_set_signal_handlers(&set, ch) == -1) {
         perror("failed to run signal handler thread");
         fuse_unmount(netpipefs_options.mountpoint, ch);
         goto destroy;

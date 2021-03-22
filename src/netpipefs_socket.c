@@ -5,11 +5,11 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include "../include/options.h"
 #include "../include/netpipefs_socket.h"
 #include "../include/scfiles.h"
 #include "../include/socketconn.h"
 #include "../include/utils.h"
-#include "../include/options.h"
 
 #define UNIX_PATH_MAX 108
 #define BASESOCKNAME "/tmp/sockfile"

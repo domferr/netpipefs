@@ -8,9 +8,7 @@
 #define FUSE_USE_VERSION 29 //fuse version 2.9. Needed by fuse.h
 #include <fuse.h>
 
-/**
- * Command line options
- */
+/** Definition fro command line options */
 struct netpipefs_options {
     char *mountpoint;
     int show_help;
@@ -25,8 +23,10 @@ struct netpipefs_options {
     size_t pipecapacity;
 };
 
+/** Command line options. Declared in options.c */
 extern struct netpipefs_options netpipefs_options;
 
+/** Debug utility to print debug strings when the debug flag is given */
 #define DEBUG(...)						\
 	do { if (netpipefs_options.debug) fprintf(stderr, ##__VA_ARGS__); } while(0)
 

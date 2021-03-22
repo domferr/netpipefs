@@ -23,6 +23,7 @@ OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 				$(OBJDIR)/netpipefs_socket.o\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
+				$(OBJDIR)/signal_handler.o	\
 				$(OBJDIR)/netpipefs_file.o	\
 				$(OBJDIR)/cbuf.o		\
 				$(OBJDIR)/openfiles.o	\
