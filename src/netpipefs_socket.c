@@ -11,6 +11,9 @@
 #include "../include/utils.h"
 #include "../include/options.h"
 
+#define UNIX_PATH_MAX 108
+#define BASESOCKNAME "/tmp/sockfile"
+
 static struct sockaddr_un socket_get_address(int port) {
     struct sockaddr_un sa;
     char sockname[UNIX_PATH_MAX];
@@ -58,7 +61,7 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     MINUS1(fdconnect = socket(AF_UNIX, SOCK_STREAM, 0), close(fdlisten); return -1)
 
     netpipefs_socket->port = -1; // remember that you are not connected yet
-    fdaccepted = socket_double_connect(fdconnect, fdlisten, conn_sa, acc_sa, timeout);
+    fdaccepted = socket_double_connect(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
     close(fdlisten); // do not listen for other connections
     if (fdaccepted == -1) { // double connect failed
         close(fdconnect);

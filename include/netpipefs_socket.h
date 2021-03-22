@@ -3,6 +3,10 @@
 
 #include <pthread.h>
 
+#define DEFAULT_PORT 7000
+#define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
+#define CONNECT_INTERVAL 1000   // Ogni quanti millisecondi riprovare la connect se fallisce
+
 struct netpipefs_socket {
     int fd_skt;     // socket file descriptor
     int port;       // port used by socket
@@ -10,6 +14,7 @@ struct netpipefs_socket {
     size_t remotepipecapacity;
 };
 
+/* header sent before each message */
 enum netpipefs_header {
     OPEN = 100,
     CLOSE,
@@ -17,8 +22,23 @@ enum netpipefs_header {
     WRITE
 };
 
+/**
+ * Establish a socket connection with a maximum time expressed my the given timeout value.
+ *
+ * @param netpipefs_socket socket structure
+ * @param timeout maximum time allowed to establish the connection. Expressed in milliseconds.
+ *
+ * @return 0 on success, -1 on error and sets errno. On timeout it returns -1 and sets errno to ETIMEDOUT
+ */
 int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long timeout);
 
+/**
+ * Closes socket connection.
+ *
+ * @param netpipefs_socket socket structure
+ *
+ * @return 0 on success, -1 on error and sets errno
+ */
 int end_socket_connection(struct netpipefs_socket *netpipefs_socket);
 
 /**

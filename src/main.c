@@ -8,7 +8,6 @@
 #include <pthread.h>
 #include <signal.h>
 #include "../include/utils.h"
-#include "../include/socketconn.h"
 #include "../include/dispatcher.h"
 #include "../include/options.h"
 #include "../include/netpipefs_file.h"

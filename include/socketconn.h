@@ -3,53 +3,35 @@
 
 #include <sys/un.h>
 
-#define DEFAULT_PORT 7000
-#define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
-#define CONNECT_INTERVAL 1000   // Ogni quanti millisecondi riprovare la connect se fallisce
-#define UNIX_PATH_MAX 108
-#define BASESOCKNAME "/tmp/sockfile"
+/**
+ * Calls connect on the given socket. If connect return ENOENT then it sleep for the given amount of interval and
+ * will try again. If the timeout expires than it returns -1 and erro is set to ETIMEDOUT.
+ *
+ * @param timeout maximum time allowed to establish the connection. Expressed in milliseconds. Will be set with the
+ * remaining time or is zero on timeout
+ * @param interval how much time should wait before trying connect again. Expressed in milliseconds.
+ *
+ * @return 0 on success, -1 on error and sets errno. On timeout it returns -1 and errno is set to ETIMEDOUT
+ */
+int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval);
 
 /**
- * Crea un socket AF_UNIX ed esegue il binding del socket e la chiamata di sistema listen() sul socket.
+ * Establish a double connection with the host: one by connect to the remote host and another one by accepting a
+ * connection from remote host. If the remote host has not yet called this function, the connection will be tried
+ * again after a certain amount of milliseconds and until the timeout. Returns the file descriptor got by accept.
+ * If time is out then it returns -1 and sets errno to ETIMEDOUT.
  *
- * @return file descriptor del socket creato, -1 in caso di errore e imposta errno
+ * @param fdconnect file descriptor used by connect
+ * @param fdaccept file descriptor used by accept
+ * @param conn_sa socket address used by connect
+ * @param acc_sa socket address used by accept
+ * @param timeout maximum time allowed to establish the connection. Expressed in milliseconds.
+ * @param interval how much time should wait before trying connect again. Expressed in milliseconds.
+ *
+ * @return the file descriptor got by accept or -1 on error and sets errno. On timeout it returns -1 and errno is set
+ * to ETIMEDOUT
  */
-int socket_listen(int port);
-
-/**
- * Accetta una connessione sul socket passato per argomento. Ritorna il file descriptor del client che ha accettato
- * la connessione. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
- *
- * @param fd_skt file descriptor sul quale accettare la connessione
- * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
- * tempo di default DEFAULT_TIMEOUT
- * @return file descriptor del client con il quale è iniziata la connessione, -1 in caso di errore e imposta errno
- */
-int socket_accept(int fd_skt, long timeout);
-
-/** TODO this doc
- * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di CONNECT_INTERVAL
- * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
- * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
- *
- * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
- * tempo di default DEFAULT_TIMEOUT
- *
- * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
- */
-int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout);
-
-/** TODO this doc
- * Cerca di connettersi via socket AF_UNIX. Il tentativo di connessione viene svolto ad intervalli di CONNECT_INTERVAL
- * millisecondi. Ritorna il file descriptor da utilizzare per la comunicazione con il server oppure -1 in caso di errore
- * ed imposta errno. Se scade il timeout allora la funzione ritorna -1 ed errno viene impostato a ETIMEDOUT.
- *
- * @param timeout tempo massimo, espresso in millisecondi, per instaurare una connessione. Se negativo viene utilizzato
- * tempo di default DEFAULT_TIMEOUT
- *
- * @return il file descriptor per comunicare con il server oppure -1 in caso di errore ed imposta errno
- */
-int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout);
+int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval);
 
 /**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
@@ -72,12 +54,5 @@ int socket_write_h(int fd_skt, void *data, size_t size);
  * @return numero di bytes letti in caso di successo, -1 altrimenti ed imposta errno oppure 0 se il socket è chiuso
  */
 int socket_read_h(int fd_skt, void **ptr);
-
-/**
- * Unlink the file used for the socket communication
- *
- * @return 0 on success, -1 otherwise and errno is set
- */
-int socket_destroy(int fd, int port);
 
 #endif //SOCKETCONN_H

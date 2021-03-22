@@ -1,5 +1,5 @@
 #include "../include/options.h"
-#include "../include/socketconn.h"
+#include "../include/netpipefs_socket.h"
 #include "../include/utils.h"
 #include "../include/netpipefs_file.h"
 #include <stddef.h>
