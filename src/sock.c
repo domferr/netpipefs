@@ -6,10 +6,10 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include "../include/utils.h"
-#include "../include/socketconn.h"
+#include "../include/sock.h"
 #include "../include/scfiles.h"
 
-int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval) {
+int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval) {
     int res;
     long sleeptime;
     while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
@@ -30,7 +30,7 @@ int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, lo
     return res;
 }
 
-int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval) {
+int sock_connect_while_accept(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval) {
     struct timeval select_timeout;
     int error = 0, connflags, res, nsel, accepted_fd = -1, connectdone = 0;
     fd_set rset, wset;
@@ -44,7 +44,7 @@ int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_s
     MINUS1(fcntl(fdconnect, F_SETFL, connflags | O_NONBLOCK), if (acc_sa.sun_family == AF_UNIX) unlink(acc_sa.sun_path); return -1)
 
     /* Connect with intervals */
-    res = socket_connect_interval(fdconnect, conn_sa, &timeout, interval);
+    res = sock_connect_interval(fdconnect, conn_sa, &timeout, interval);
     if (res == -1 && errno != EINPROGRESS) goto end;
     if (res == 0) connectdone = 1; /* connect completed immediately */
 
@@ -108,14 +108,14 @@ end:
     return accepted_fd;
 }
 
-int socket_write_h(int fd_skt, void *data, size_t size) {
+int sock_write_h(int fd_skt, void *data, size_t size) {
     int bytes = writen(fd_skt, &size, sizeof(size_t));
     if (bytes > 0)
         return writen(fd_skt, data, size);
     return bytes;
 }
 
-int socket_read_h(int fd_skt, void **ptr) {
+int sock_read_h(int fd_skt, void **ptr) {
     int bytes;
     size_t size = 0;
     bytes = readn(fd_skt, &size, sizeof(size_t));

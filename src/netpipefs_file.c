@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "../include/netpipefs_file.h"
 #include "../include/utils.h"
-#include "../include/socketconn.h"
+#include "../include/sock.h"
 #include "../include/openfiles.h"
 #include "../include/scfiles.h"
 #include "../include/netpipefs_socket.h"

@@ -19,7 +19,7 @@ LIBS		= -lpthread
 # dependencies for netpipefs executable
 OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 				$(OBJDIR)/scfiles.o		\
-				$(OBJDIR)/socketconn.o	\
+				$(OBJDIR)/sock.o		\
 				$(OBJDIR)/netpipefs_socket.o\
 				$(OBJDIR)/dispatcher.o	\
 				$(OBJDIR)/options.o		\
@@ -63,7 +63,7 @@ $(BINDIR)/netpipefs: $(OBJS_NETPIPEFS)
 $(BINDIR)/%.test: $(OBJDIR)/%.test.o $(OBJDIR)/%.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/netpipefs_file.o $(OBJDIR)/cbuf.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/netpipefs_socket.o $(OBJDIR)/socketconn.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
+$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/netpipefs_file.o $(OBJDIR)/cbuf.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/netpipefs_socket.o $(OBJDIR)/sock.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:

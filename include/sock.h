@@ -13,7 +13,7 @@
  *
  * @return 0 on success, -1 on error and sets errno. On timeout it returns -1 and errno is set to ETIMEDOUT
  */
-int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval);
+int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval);
 
 /**
  * Establish a double connection with the host: one by connect to the remote host and another one by accepting a
@@ -31,7 +31,7 @@ int socket_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, lo
  * @return the file descriptor got by accept or -1 on error and sets errno. On timeout it returns -1 and errno is set
  * to ETIMEDOUT
  */
-int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval);
+int sock_connect_while_accept(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval);
 
 /**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
@@ -43,7 +43,7 @@ int socket_double_connect(int fdconnect, int fdaccept, struct sockaddr_un conn_s
  *
  * @return numero di bytes scritti in caso di successo, -1 altrimenti ed imposta errno, 0 se il socket è stato chiudo
  */
-int socket_write_h(int fd_skt, void *data, size_t size);
+int sock_write_h(int fd_skt, void *data, size_t size);
 
 /**
  * Legge dal socket i dati attraverso il file descriptor fornito, allocando abbastanza memoria. ptr punterà all'aria di
@@ -53,6 +53,6 @@ int socket_write_h(int fd_skt, void *data, size_t size);
  * @param ptr puntatore all'area di memoria allocata che contiene i dati letti
  * @return numero di bytes letti in caso di successo, -1 altrimenti ed imposta errno oppure 0 se il socket è chiuso
  */
-int socket_read_h(int fd_skt, void **ptr);
+int sock_read_h(int fd_skt, void **ptr);
 
 #endif //SOCKETCONN_H

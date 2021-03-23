@@ -8,7 +8,7 @@
 #include "../include/options.h"
 #include "../include/netpipefs_socket.h"
 #include "../include/scfiles.h"
-#include "../include/socketconn.h"
+#include "../include/sock.h"
 #include "../include/utils.h"
 
 #define UNIX_PATH_MAX 108
@@ -61,7 +61,7 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     MINUS1(fdconnect = socket(AF_UNIX, SOCK_STREAM, 0), close(fdlisten); return -1)
 
     netpipefs_socket->port = -1; // remember that you are not connected yet
-    fdaccepted = socket_double_connect(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
+    fdaccepted = sock_connect_while_accept(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
     close(fdlisten); // do not listen for other connections
     if (fdaccepted == -1) { // double connect failed
         close(fdconnect);
@@ -69,11 +69,11 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     }
 
     /* send host */
-    err = socket_write_h(fdconnect, (void*) netpipefs_options.hostip, sizeof(char)*(1+host_len));
+    err = sock_write_h(fdconnect, (void *) netpipefs_options.hostip, sizeof(char) * (1 + host_len));
     if (err <= 0) goto error;
 
     /* read other host */
-    err = socket_read_h(fdaccepted, (void**) &host_received);
+    err = sock_read_h(fdaccepted, (void **) &host_received);
     if (err <= 0) goto error;
 
     /* compare the hosts */
@@ -125,14 +125,14 @@ static int send_socket_header(int fd_skt, enum netpipefs_header message, const c
     int bytes = writen(fd_skt, &message, sizeof(enum netpipefs_header));
     if (bytes <= 0) return bytes;
 
-    bytes = socket_write_h(fd_skt, (void*) path, sizeof(char)*(strlen(path)+1));
+    bytes = sock_write_h(fd_skt, (void *) path, sizeof(char) * (strlen(path) + 1));
     return bytes;
 }
 
 int read_socket_header(struct netpipefs_socket *skt, enum netpipefs_header *header, char **path) {
     int bytes = readn(skt->fd_skt, header, sizeof(enum netpipefs_header));
     if (bytes > 0)
-        return socket_read_h(skt->fd_skt, (void**) path);
+        return sock_read_h(skt->fd_skt, (void **) path);
 
     return bytes; // <= 0
 }
@@ -176,7 +176,7 @@ int send_write_message(struct netpipefs_socket *skt, const char *path, const cha
 
     bytes = send_socket_header(skt->fd_skt, WRITE, path);
     if (bytes > 0) {
-        bytes = socket_write_h(skt->fd_skt, (void*) buf, size);
+        bytes = sock_write_h(skt->fd_skt, (void *) buf, size);
     }
 
     PTH(err, pthread_mutex_unlock(&(skt->writemtx)), return -1)
