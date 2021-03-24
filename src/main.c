@@ -55,9 +55,9 @@ static void* init_callback(struct fuse_conn_info *conn) {
 
     /* Print a resume */
     DEBUG("dispatcher running\n");
-    DEBUG("connection established\n");
+    DEBUG("connection established: %s\n", (strcmp(netpipefs_options.hostip, "localhost") == 0 ? "AF_UNIX":"AF_INET"));
     DEBUG("host=%s:%d\n", netpipefs_options.hostip, netpipefs_options.hostport);
-    DEBUG("local port=%d\n", (netpipefs_socket.port == -1 ? netpipefs_options.port:netpipefs_socket.port));
+    DEBUG("local port=%d\n", netpipefs_options.port);
     DEBUG("local pipe capacity=%ld\n", netpipefs_options.pipecapacity);
     DEBUG("host pipe capacity=%ld\n", netpipefs_socket.remotepipecapacity);
 
@@ -85,7 +85,7 @@ static void destroy_callback(void *privatedata) {
     err = end_socket_connection(&netpipefs_socket);
     if (err == -1) perror("failed to close socket connection");
 
-    PTH(err, pthread_mutex_destroy(&(netpipefs_socket.writemtx)), perror("failed to destroy socket's mutex"))
+    PTH(err, pthread_mutex_destroy(&(netpipefs_socket.wr_mtx)), perror("failed to destroy socket's mutex"))
 }
 
 /**
@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
     }
 
     /* Init socket mutex */
-    PTHERR(err, pthread_mutex_init(&(netpipefs_socket.writemtx), NULL), netpipefs_opt_free(&args); return EXIT_FAILURE)
+    PTHERR(err, pthread_mutex_init(&(netpipefs_socket.wr_mtx), NULL), netpipefs_opt_free(&args); return EXIT_FAILURE)
 
     if (!netpipefs_options.delayconnect) {
         /* Connect before mounting */

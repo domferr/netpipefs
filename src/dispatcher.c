@@ -25,7 +25,7 @@ extern struct netpipefs_socket netpipefs_socket;
 static int on_open(char *path) {
     int bytes, mode;
 
-    bytes = readn(netpipefs_socket.fd_skt, &mode, sizeof(int));
+    bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
@@ -36,7 +36,7 @@ static int on_open(char *path) {
 
 static int on_close(char *path) {
     int bytes, mode;
-    bytes = readn(netpipefs_socket.fd_skt, &mode, sizeof(int));
+    bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: CLOSE %s %d\n", path, mode);
@@ -71,7 +71,7 @@ static int on_write(char *path) {
 static int on_read(char *path) {
     int err, bytes;
     size_t size;
-    bytes = readn(netpipefs_socket.fd_skt, &size, sizeof(size_t));
+    bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: READ %s %ld bytes\n", path, size);
@@ -89,9 +89,9 @@ static void *netpipefs_dispatcher_fun(void *args) {
 
     fd_set set, rd_set;
     FD_ZERO(&set);
-    FD_SET(netpipefs_socket.fd_skt, &set);
+    FD_SET(netpipefs_socket.fd, &set);
     FD_SET(dispatcher.pipefd[0], &set);
-    nfds = netpipefs_socket.fd_skt > dispatcher.pipefd[0] ? netpipefs_socket.fd_skt:dispatcher.pipefd[0];
+    nfds = netpipefs_socket.fd > dispatcher.pipefd[0] ? netpipefs_socket.fd : dispatcher.pipefd[0];
 
     while(run) {
         rd_set = set;

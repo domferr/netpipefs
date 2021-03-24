@@ -94,7 +94,7 @@ forceunmount:
 PROD_PORT 			= 12345
 CONS_PORT 			= 6789
 PROD_HOST 			= localhost
-CONS_HOST 			= 127.0.0.1
+CONS_HOST 			= localhost
 PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 

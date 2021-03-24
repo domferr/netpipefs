@@ -217,7 +217,7 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
 int netpipefs_file_recv(struct netpipefs_file *file) {
     int err;
     size_t size = 0;
-    err = readn(netpipefs_socket.fd_skt, &size, sizeof(size_t));
+    err = readn(netpipefs_socket.fd, &size, sizeof(size_t));
     if (err <= 0) return err;
     if (size <= 0) return -1;
 
@@ -234,7 +234,7 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
 
         /* file is not full */
         if (file->readers > 0) {
-            dataput = cbuf_readn(netpipefs_socket.fd_skt, file->buffer, remaining);
+            dataput = cbuf_readn(netpipefs_socket.fd, file->buffer, remaining);
             if (dataput <= 0) {
                 netpipefs_file_unlock(file);
                 return -1;

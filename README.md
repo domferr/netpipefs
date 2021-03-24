@@ -29,7 +29,6 @@ To check if the filesystem is mounted:
 
     mount | grep netpipefs
 
-
 ## Build
 
 First, download NetpipeFS from this repo. On Linux and BSD, you will also need to install [libfuse](http://github.com/libfuse/libfuse) 2.9.0 or newer. On macOS, you need [OSXFUSE](https://osxfuse.github.io/) instead. To build netpipefs, run the following command in the main directory:
@@ -45,7 +44,7 @@ To run the test suite first build the tests by running ``make test`` and finally
 | `-h, --help` | Print help and exit |
 | `-d, --debug` | Print debugging information |
 | `-p PORT, --port=PORT` | Port used for network communication |
-| `--hostip=IP` | Host IP address |
+| `--hostip=IP` | Host IP address. If "localhost" then AF_UNIX sockets are used |
 | `--hostport=PORT` | Port used by host |
 | `--timeout=MILLISECONDS` | Connection timeout. Expressed in milliseconds |
 | `--pipecapaciy=CAPACITY` | Maximum network pipe size |

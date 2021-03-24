@@ -5,6 +5,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
 #include "../include/options.h"
 #include "../include/netpipefs_socket.h"
 #include "../include/scfiles.h"
@@ -14,55 +15,86 @@
 #define UNIX_PATH_MAX 108
 #define BASESOCKNAME "/tmp/sockfile"
 
-static struct sockaddr_un socket_get_address(int port) {
-    struct sockaddr_un sa;
-    char sockname[UNIX_PATH_MAX];
+static int afinet_address(struct sockaddr_in *sin, int port, const char *ip) {
+    memset(sin, 0, sizeof(*sin));
 
-    sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
-    strncpy(sa.sun_path, sockname, UNIX_PATH_MAX);
-    sa.sun_family = AF_UNIX;
+    sin->sin_family = AF_INET;
+    sin->sin_port = htons(port);
+    if (ip == NULL) { // is server
+        sin->sin_addr.s_addr = htonl(INADDR_ANY);
+    } else if (inet_pton(AF_INET, ip, &(sin->sin_addr)) < 0) { // is client
+        return -1;
+    }
 
-    return sa;
+    return 0;
 }
 
-static int unlink_socket(int port) {
+static void afunix_address(struct sockaddr_un *sun, int port) {
     char sockname[UNIX_PATH_MAX];
+
+    memset(sun, 0, sizeof(*sun));
+
+    sun->sun_family = AF_UNIX;
     sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
-    return unlink(sockname);
+    strncpy(sun->sun_path, sockname, UNIX_PATH_MAX);
 }
 
 /**
  * Compares the given ip addresses and returns 1, 0 or -1 if the first is greater or equal or less than the second.
- * If the two ip addresses are equal then returns 1, 0 or -1 if firstport greater or equal or less than secondport.
- * If the ip addresses are not valid then 0 is returned.
+ * If the ip addresses are not valid or "localhost" or are the same then it returns 1, 0 or -1 if the first port
+ * is greater or equal or less than the second port.
  */
 static int hostcmp(char *firsthost, int firstport, char *secondhost, int secondport) {
     int firstaddr[4], secondaddr[4];
 
-    MINUS1(ipv4_address_to_array(firsthost, firstaddr), return 0)
-    MINUS1(ipv4_address_to_array(secondhost, secondaddr), return 0)
+    MINUS1(ipv4_address_to_array(firsthost, firstaddr), goto ports_diff)
+    MINUS1(ipv4_address_to_array(secondhost, secondaddr), goto ports_diff)
 
     for (int i = 0; i < 4; i++) {
         if (firstaddr[i] != secondaddr[i]) return firstaddr[i] - secondaddr[i];
     }
 
+ports_diff:
+    // if it is localhost or the ip addresses are the same
     return firstport - secondport;
 }
 
 int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long timeout) {
-    int err, fdlisten, fdaccepted, fdconnect;
+    int err, fdlisten, fdaccepted, fdconnect, comparison, localhost;
     char *host_received = NULL;
-    struct sockaddr_un acc_sa = socket_get_address(netpipefs_options.port);
-    struct sockaddr_un conn_sa = socket_get_address(netpipefs_options.hostport);
+    struct sockaddr *conn_sa;
+    struct sockaddr *acc_sa;
     size_t host_len = strlen(netpipefs_options.hostip);
     if (host_len == 0) return -1;
 
-    MINUS1(fdlisten = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
-    MINUS1(fdconnect = socket(AF_UNIX, SOCK_STREAM, 0), close(fdlisten); return -1)
+    /* Set the sock addresses used for connect() and accept() */
+    localhost = strcmp(netpipefs_options.hostip, "localhost") == 0;
+    if (localhost) {
+        struct sockaddr_un acc_sa_un;
+        struct sockaddr_un conn_sa_un;
+        afunix_address(&conn_sa_un, netpipefs_options.hostport);
+        afunix_address(&acc_sa_un, netpipefs_options.port);
+        acc_sa = (struct sockaddr *) &acc_sa_un;
+        conn_sa = (struct sockaddr *) &conn_sa_un;
+    } else {
+        struct sockaddr_in acc_sa_in;
+        struct sockaddr_in conn_sa_in;
+        err = afinet_address(&conn_sa_in, netpipefs_options.hostport, netpipefs_options.hostip);
+        if (err == -1) return -1;
+        err = afinet_address(&acc_sa_in, netpipefs_options.port, NULL);
+        if (err == -1) return -1;
+        acc_sa = (struct sockaddr *) &acc_sa_in;
+        conn_sa = (struct sockaddr *) &conn_sa_in;
+    }
 
-    netpipefs_socket->port = -1; // remember that you are not connected yet
+    MINUS1(fdconnect = socket(conn_sa->sa_family, SOCK_STREAM, 0), return -1)
+    MINUS1(fdlisten = socket(acc_sa->sa_family, SOCK_STREAM, 0), close(fdconnect); return -1)
+
     fdaccepted = sock_connect_while_accept(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
-    close(fdlisten); // do not listen for other connections
+    // do not listen for other connections
+    close(fdlisten);
+    if (acc_sa->sa_family == AF_UNIX)
+        MINUS1(unlink(((struct sockaddr_un *) acc_sa)->sun_path), goto error)
     if (fdaccepted == -1) { // double connect failed
         close(fdconnect);
         return -1;
@@ -77,31 +109,29 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     if (err <= 0) goto error;
 
     /* compare the hosts */
-    int comparison = hostcmp(netpipefs_options.hostip, netpipefs_options.port, host_received, netpipefs_options.hostport);
-    if (comparison > 0) {
+    comparison = hostcmp(netpipefs_options.hostip, netpipefs_options.hostport, host_received, netpipefs_options.port);
+
+    if (comparison > 0) { // use fdaccepted, acc_sa
         MINUS1(close(fdconnect), goto error)
         fdconnect = -1;
-        netpipefs_socket->fd_skt = fdaccepted;
-        netpipefs_socket->port  = netpipefs_options.port;
-    } else if (comparison < 0) {
+
+        netpipefs_socket->fd = fdaccepted;
+    } else if (comparison < 0) { // use fdconnect, conn_sa
         MINUS1(close(fdaccepted), goto error)
         fdaccepted = -1;
-        // not needed to accept other connections anymore
-        MINUS1(unlink_socket(netpipefs_options.port), goto error)
-        //MINUS1(socket_destroy(fdlisten, netpipefs_options.port), goto error)
-        netpipefs_socket->fd_skt = fdconnect;
-        netpipefs_socket->port  = -1;
+
+        netpipefs_socket->fd = fdconnect;
     } else {
         errno = EINVAL;
         goto error;
     }
 
     /* send local pipe capacity */
-    err = writen(netpipefs_socket->fd_skt, &netpipefs_options.pipecapacity, sizeof(size_t));
+    err = writen(netpipefs_socket->fd, &netpipefs_options.pipecapacity, sizeof(size_t));
     if (err <= 0) goto error;
 
     /* read remote pipe capacity */
-    err = readn(netpipefs_socket->fd_skt, &netpipefs_socket->remotepipecapacity, sizeof(size_t));
+    err = readn(netpipefs_socket->fd, &netpipefs_socket->remotepipecapacity, sizeof(size_t));
     if (err <= 0) goto error;
 
     free(host_received);
@@ -115,10 +145,7 @@ error:
 }
 
 int end_socket_connection(struct netpipefs_socket *netpipefs_socket) {
-    if (netpipefs_socket->port == -1) return 0; // other end will close
-
-    close(netpipefs_socket->fd_skt);
-    return unlink_socket(netpipefs_options.port);
+    return close(netpipefs_socket->fd);
 }
 
 static int send_socket_header(int fd_skt, enum netpipefs_header message, const char *path) {
@@ -130,9 +157,9 @@ static int send_socket_header(int fd_skt, enum netpipefs_header message, const c
 }
 
 int read_socket_header(struct netpipefs_socket *skt, enum netpipefs_header *header, char **path) {
-    int bytes = readn(skt->fd_skt, header, sizeof(enum netpipefs_header));
+    int bytes = readn(skt->fd, header, sizeof(enum netpipefs_header));
     if (bytes > 0)
-        return sock_read_h(skt->fd_skt, (void **) path);
+        return sock_read_h(skt->fd, (void **) path);
 
     return bytes; // <= 0
 }
@@ -140,14 +167,14 @@ int read_socket_header(struct netpipefs_socket *skt, enum netpipefs_header *head
 int send_open_message(struct netpipefs_socket *skt, const char *path, int mode) {
     int err, bytes;
 
-    PTH(err, pthread_mutex_lock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
 
-    bytes = send_socket_header(skt->fd_skt, OPEN, path);
+    bytes = send_socket_header(skt->fd, OPEN, path);
     if (bytes > 0) {
-        bytes = writen(skt->fd_skt, &mode, sizeof(int));
+        bytes = writen(skt->fd, &mode, sizeof(int));
     }
 
-    PTH(err, pthread_mutex_unlock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
     if (bytes > 0) DEBUG("sent: OPEN %s %d\n", path, mode);
 
     return bytes;
@@ -156,14 +183,14 @@ int send_open_message(struct netpipefs_socket *skt, const char *path, int mode) 
 int send_close_message(struct netpipefs_socket *skt, const char *path, int mode) {
     int err, bytes;
 
-    PTH(err, pthread_mutex_lock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
 
-    bytes = send_socket_header(skt->fd_skt, CLOSE, path);
+    bytes = send_socket_header(skt->fd, CLOSE, path);
     if (bytes > 0) {
-        bytes = writen(skt->fd_skt, &mode, sizeof(int));
+        bytes = writen(skt->fd, &mode, sizeof(int));
     }
 
-    PTH(err, pthread_mutex_unlock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
     if (bytes > 0) DEBUG("sent: CLOSE %s %d\n", path, mode);
 
     return bytes;
@@ -172,14 +199,14 @@ int send_close_message(struct netpipefs_socket *skt, const char *path, int mode)
 int send_write_message(struct netpipefs_socket *skt, const char *path, const char *buf, size_t size) {
     int err, bytes;
 
-    PTH(err, pthread_mutex_lock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
 
-    bytes = send_socket_header(skt->fd_skt, WRITE, path);
+    bytes = send_socket_header(skt->fd, WRITE, path);
     if (bytes > 0) {
-        bytes = sock_write_h(skt->fd_skt, (void *) buf, size);
+        bytes = sock_write_h(skt->fd, (void *) buf, size);
     }
 
-    PTH(err, pthread_mutex_unlock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
     if (bytes > 0) DEBUG("sent: WRITE %s %ld <DATA>\n", path, size);
 
     return bytes;
@@ -188,14 +215,14 @@ int send_write_message(struct netpipefs_socket *skt, const char *path, const cha
 int send_read_message(struct netpipefs_socket *skt, const char *path, size_t size) {
     int err, bytes;
 
-    PTH(err, pthread_mutex_lock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
 
-    bytes = send_socket_header(skt->fd_skt, READ, path);
+    bytes = send_socket_header(skt->fd, READ, path);
     if (bytes > 0) {
-        bytes = writen(skt->fd_skt, &size, sizeof(size_t));
+        bytes = writen(skt->fd, &size, sizeof(size_t));
     }
 
-    PTH(err, pthread_mutex_unlock(&(skt->writemtx)), return -1)
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
     if (bytes > 0) DEBUG("sent: READ %s %ld\n", path, size);
 
     return bytes;

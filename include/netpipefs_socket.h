@@ -5,12 +5,11 @@
 
 #define DEFAULT_PORT 7000
 #define DEFAULT_TIMEOUT 8000    // Massimo tempo, espresso in millisecondi, per avviare una connessione socket
-#define CONNECT_INTERVAL 1000   // Ogni quanti millisecondi riprovare la connect se fallisce
+#define CONNECT_INTERVAL 500    // Ogni quanti millisecondi riprovare la connect se fallisce
 
 struct netpipefs_socket {
-    int fd_skt;     // socket file descriptor
-    int port;       // port used by socket
-    pthread_mutex_t writemtx;
+    int fd;     // socket file descriptor
+    pthread_mutex_t wr_mtx; // protect write
     size_t remotepipecapacity;
 };
 

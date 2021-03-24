@@ -58,7 +58,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         fprintf(stderr, "missing host ip address\nsee '%s -h' for usage\n", progname);
         return 1;
     } else if (strcmp(netpipefs_options.hostip, "localhost") == 0) { // localhost is valid. convert into 127.0.0.1
-        netpipefs_options.hostip = strcpy(netpipefs_options.hostip, "127.0.0.1\0");
+        //netpipefs_options.hostip = strcpy(netpipefs_options.hostip, "127.0.0.1\0");
     } else if (ipv4_address_to_array(netpipefs_options.hostip, array) == -1) { // validate host ip address
         fprintf(stderr, "invalid host ip address\nsee '%s -h' for usage\n", progname);
         return 1;

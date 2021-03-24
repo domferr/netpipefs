@@ -53,7 +53,7 @@ static void test_openfiles_table(void) {
     // fake socket with a pipe
     int pipefd[2];
     pipe(pipefd);
-    netpipefs_socket.fd_skt = pipefd[1];
+    netpipefs_socket.fd = pipefd[1];
 
     /* Init open files table */
     test(netpipefs_open_files_table_init() == 0)

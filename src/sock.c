@@ -5,67 +5,65 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "../include/utils.h"
 #include "../include/sock.h"
 #include "../include/scfiles.h"
 
-int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval) {
-    int res;
-    long sleeptime;
-    while ((res = connect(fd_skt, (struct sockaddr *) &sa, sizeof(sa))) < 0) {
-        if (errno == ENOENT && *timeout > 0) {
-            sleeptime = *timeout < interval ? *timeout:interval;
-            MINUS1(msleep(sleeptime), return -1)
-            *timeout = *timeout - sleeptime;
-        } else {
-            break;
-        }
+/** Returns the size of the given sockaddr. Supports AF_UNIX and AF_INET */
+static socklen_t get_socklen(struct sockaddr *sa) {
+    if (sa->sa_family == AF_UNIX) {
+        struct sockaddr_un *sun = (struct sockaddr_un *) sa;
+        return sizeof(*sun);
     }
 
-    if (*timeout == 0) {
-        errno = ETIMEDOUT;
-        return -1;
-    }
-
-    return res;
+    return sizeof(*((struct sockaddr_in *) sa)); // af inet
 }
 
-int sock_connect_while_accept(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval) {
+int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, struct sockaddr *acc_sa, long timeout, long interval) {
     struct timeval select_timeout;
+    long remaining, sleeptime;
     int error = 0, connflags, res, nsel, accepted_fd = -1, connectdone = 0;
     fd_set rset, wset;
 
     /* Bind and listen */
-    MINUS1(bind(fdaccept, (struct sockaddr *) &acc_sa, sizeof(acc_sa)), return -1)
-    MINUS1(listen(fdaccept, SOMAXCONN), return -1)
+    MINUS1(bind(fdacc, acc_sa, get_socklen(acc_sa)), return -1)
+    MINUS1(listen(fdacc, SOMAXCONN), return -1)
 
     /* Set socket for connect to nonblock */
-    MINUS1(connflags = fcntl(fdconnect, F_GETFL, 0), if (acc_sa.sun_family == AF_UNIX) unlink(acc_sa.sun_path); return -1)
-    MINUS1(fcntl(fdconnect, F_SETFL, connflags | O_NONBLOCK), if (acc_sa.sun_family == AF_UNIX) unlink(acc_sa.sun_path); return -1)
+    MINUS1(connflags = fcntl(fdconn, F_GETFL, 0), return -1)
+    MINUS1(fcntl(fdconn, F_SETFL, connflags | O_NONBLOCK), return -1)
 
-    /* Connect with intervals */
-    res = sock_connect_interval(fdconnect, conn_sa, &timeout, interval);
-    if (res == -1 && errno != EINPROGRESS) goto end;
+    /* Connect */
+    res = connect(fdconn, conn_sa, get_socklen(conn_sa));
+    if (res == -1) {
+        if (errno != EINPROGRESS && errno != ENOENT) goto end;
+    }
     if (res == 0) connectdone = 1; /* connect completed immediately */
 
-    /* Set the remaining timeout and select for connect and accept */
-    select_timeout.tv_sec = MS_TO_SEC(timeout);
-    select_timeout.tv_usec = MS_TO_USEC(timeout);
+    remaining = timeout;
     while(!connectdone || accepted_fd == -1) {
         nsel = -1;
         FD_ZERO(&rset);
         if (!connectdone) {
-            FD_SET(fdconnect, &rset); // rset += connect fd
-            nsel = fdconnect;
+            FD_SET(fdconn, &rset); // rset += connect fd
+            nsel = fdconn;
             wset = rset; // wset = connect fd
         }
         if (accepted_fd == -1) {
-            FD_SET(fdaccept, &rset); // rset += accept fd
-            nsel = fdaccept > nsel ? fdaccept:nsel;
+            FD_SET(fdacc, &rset); // rset += accept fd
+            nsel = fdacc > nsel ? fdacc : nsel;
         }
+
+        /* Set the remaining timeout */
+        select_timeout.tv_sec = MS_TO_SEC(remaining);
+        select_timeout.tv_usec = MS_TO_USEC(remaining);
+
+        /* select() for connect and accept */
         res = select(nsel + 1, &rset, !connectdone ? &wset:NULL, NULL, &select_timeout);
         if (res == 0) {
             errno = ETIMEDOUT;
+            res = -1;
             break;
         } else if (res == -1) {
             break;
@@ -73,35 +71,53 @@ int sock_connect_while_accept(int fdconnect, int fdaccept, struct sockaddr_un co
 
         if (!connectdone) {
             /* Check for connect */
-            if (FD_ISSET(fdconnect, &rset) || FD_ISSET(fdconnect, &wset)) {
-                socklen_t len = sizeof(error);
-                if (getsockopt(fdconnect, SOL_SOCKET, SO_ERROR, &error, &len) < 0) { /* Solaris pending error */
-                    res = -1;
-                    break;
+            if (FD_ISSET(fdconn, &rset) || FD_ISSET(fdconn, &wset)) {
+                res = connect(fdconn, conn_sa, get_socklen(conn_sa));
+                if (res >= 0) connectdone = 1; /* connect completed immediately */
+                if (res == -1) {
+                    switch (errno) {
+                        case EISCONN: // successful connect
+                            connectdone = 1;
+                            res = 1;
+                            break;
+                        case ECONNREFUSED:
+                        case ENOENT:
+                            remaining = (select_timeout.tv_sec * 1000L) + (select_timeout.tv_usec / 1000L);
+                            if (remaining == 0) {
+                                errno = ETIMEDOUT;
+                            } else {
+                                sleeptime = remaining < interval ? remaining : interval;
+                                MINUS1(msleep(sleeptime), res = -1)
+                                remaining -= sleeptime;
+                                res = 1;
+                            }
+                            break;
+                        case EALREADY:
+                        case EINPROGRESS:
+                            res = 1;
+                            break;
+                        default: // there is some error
+                            break;
+                    }
                 }
-                if (error) {
-                    errno = error;
-                    res = -1;
-                    break;
-                }
-                connectdone = 1;
+                // if it is still -1 then an error occurred
+                if (res == -1) break;
             }
         }
 
         /* Check for accept */
-        if (accepted_fd == -1 && FD_ISSET(fdaccept, &rset)) {
-            res = accept(fdaccept, NULL, 0);
+        if (accepted_fd == -1 && FD_ISSET(fdacc, &rset)) {
+            res = accept(fdacc, NULL, 0);
             if (res == -1) break;
             accepted_fd = res;
         }
     }
 
 end:
-    MINUS1(fcntl(fdconnect, F_SETFL, connflags), return -1) /* restore file status flags */
+    MINUS1(fcntl(fdconn, F_SETFL, connflags), return -1) /* restore file status flags */
 
-    if (res <= 0) {
+    if (res == -1) {
         if (accepted_fd != -1) close(accepted_fd);
-        if (acc_sa.sun_family == AF_UNIX) unlink(acc_sa.sun_path);
         return -1;
     }
 

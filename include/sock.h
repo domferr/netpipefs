@@ -2,18 +2,7 @@
 #define SOCKETCONN_H
 
 #include <sys/un.h>
-
-/**
- * Calls connect on the given socket. If connect return ENOENT then it sleep for the given amount of interval and
- * will try again. If the timeout expires than it returns -1 and erro is set to ETIMEDOUT.
- *
- * @param timeout maximum time allowed to establish the connection. Expressed in milliseconds. Will be set with the
- * remaining time or is zero on timeout
- * @param interval how much time should wait before trying connect again. Expressed in milliseconds.
- *
- * @return 0 on success, -1 on error and sets errno. On timeout it returns -1 and errno is set to ETIMEDOUT
- */
-int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long interval);
+#include <netinet/in.h>
 
 /**
  * Establish a double connection with the host: one by connect to the remote host and another one by accepting a
@@ -21,8 +10,8 @@ int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long
  * again after a certain amount of milliseconds and until the timeout. Returns the file descriptor got by accept.
  * If time is out then it returns -1 and sets errno to ETIMEDOUT.
  *
- * @param fdconnect file descriptor used by connect
- * @param fdaccept file descriptor used by accept
+ * @param fdconn file descriptor used by connect
+ * @param fdacc file descriptor used by accept
  * @param conn_sa socket address used by connect
  * @param acc_sa socket address used by accept
  * @param timeout maximum time allowed to establish the connection. Expressed in milliseconds.
@@ -31,7 +20,7 @@ int sock_connect_interval(int fd_skt, struct sockaddr_un sa, long *timeout, long
  * @return the file descriptor got by accept or -1 on error and sets errno. On timeout it returns -1 and errno is set
  * to ETIMEDOUT
  */
-int sock_connect_while_accept(int fdconnect, int fdaccept, struct sockaddr_un conn_sa, struct sockaddr_un acc_sa, long timeout, long interval);
+int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, struct sockaddr *acc_sa, long timeout, long interval);
 
 /**
  * Invia i dati passati per argomento attraverso il file descriptor fornito. I dati vengono preceduti da un unsigned
