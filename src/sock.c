@@ -23,7 +23,7 @@ static socklen_t get_socklen(struct sockaddr *sa) {
 int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, struct sockaddr *acc_sa, long timeout, long interval) {
     struct timeval select_timeout;
     long remaining, sleeptime;
-    int error = 0, connflags, res, nsel, accepted_fd = -1, connectdone = 0;
+    int connflags, res, nsel, accepted_fd = -1, connectdone = 0;
     fd_set rset, wset;
 
     /* Bind and listen */

@@ -91,12 +91,13 @@ int netpipefs_file_unlock(struct netpipefs_file *file) {
     return err;
 }
 
-struct netpipefs_file *netpipefs_file_open(const char *path, int mode) {
+struct netpipefs_file *netpipefs_file_open(const char *path, int mode, int nonblock) {
     int err, bytes, just_created = 0;
     struct netpipefs_file *file;
 
+    // both read and write access is not allowed
     if (mode == O_RDWR) {
-        errno = EINVAL;
+        errno = EPERM;
         return NULL;
     }
 
@@ -109,26 +110,34 @@ struct netpipefs_file *netpipefs_file_open(const char *path, int mode) {
     /* update readers and writers and notify who's waiting for readers/writers */
     if (mode == O_RDONLY) file->readers++;
     else if (mode == O_WRONLY) file->writers++;
+    if (nonblock && (file->readers == 0 || file->writers == 0)) {
+        errno = EAGAIN;
+        netpipefs_file_unlock(file);
+        goto unopen;
+    }
     DEBUGFILE(file);
-    PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipefs_file_unlock(file); goto error)
+    PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipefs_file_unlock(file); goto unopen)
 
     bytes = send_open_message(&netpipefs_socket, path, mode);
 
     if (bytes <= 0) { // cannot write over socket
         netpipefs_file_unlock(file);
-        goto error;
+        goto unopen;
     }
 
     /* wait for at least one writer and one reader */
     while (file->readers == 0 || file->writers == 0) {
-        PTH(err, pthread_cond_wait(&(file->canopen), &(file->mtx)), netpipefs_file_unlock(file); goto error)
+        PTH(err, pthread_cond_wait(&(file->canopen), &(file->mtx)), netpipefs_file_unlock(file); goto unopen)
     }
 
-    NOTZERO(netpipefs_file_unlock(file), goto error)
+    NOTZERO(netpipefs_file_unlock(file), goto unopen)
 
     return file;
 
-    error:
+unopen:
+    if (mode == O_RDONLY) file->readers--;
+    else if (mode == O_WRONLY) file->writers--;
+error:
     if (just_created) {
         netpipefs_remove_open_file(path);
         netpipefs_file_free(file);
@@ -141,7 +150,7 @@ struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode) {
     struct netpipefs_file *file;
 
     if (mode == O_RDWR) {
-        errno = EINVAL;
+        errno = EPERM;
         return NULL;
     }
 
@@ -167,7 +176,7 @@ struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode) {
     return NULL;
 }
 
-int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size) {
+ssize_t netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size, int nonblock) {
     int err;
 
     NOTZERO(netpipefs_file_lock(file), return -1)
@@ -176,6 +185,15 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
     size_t datasent;
     char *bufptr = (char *) buf;
     while (remaining > 0 && file->readers > 0) {
+        if (nonblock && file->remotesize == file->remotecapacity) {
+            // buffer is full and the entire data cannot be written
+            if (remaining == size) {
+                remaining += 1; // will return -1 (size - size - 1)
+                errno = EAGAIN;
+            }
+            // else: buffer is full and some data has been written
+            break;
+        }
         /* file is full on the remote host. wait for enough space */
         while(file->remotesize == file->remotecapacity && file->readers > 0) {
             DEBUG("cannot send: remote buffer is full\n");
@@ -203,7 +221,7 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
     }
 
     /* return -1 and sets errno to EPIPE if there are no readers */
-    if (remaining > 0 && file->readers == 0) {
+    if (remaining == size && file->readers == 0) {
         errno = EPIPE;
         netpipefs_file_unlock(file);
         return -1;
@@ -211,7 +229,7 @@ int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t siz
 
     NOTZERO(netpipefs_file_unlock(file), return -1)
 
-    return size;
+    return size - remaining;
 }
 
 int netpipefs_file_recv(struct netpipefs_file *file) {
@@ -259,7 +277,7 @@ int netpipefs_file_recv(struct netpipefs_file *file) {
     return size;
 }
 
-ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size) {
+ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size, int nonblock) {
     int err, bytes_wrote, canread;
     char *bufptr = buf;
 
@@ -269,6 +287,15 @@ ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size)
     size_t datagot;
     canread = file->writers > 0 || !cbuf_empty(file->buffer);
     while(remaining > 0 && canread) {
+        if (nonblock && cbuf_empty(file->buffer) && file->writers > 0) {
+            // buffer is empty and the entire data cannot be read
+            if (remaining == size) {
+                remaining += 1; // will return -1 (size - size - 1)
+                errno = EAGAIN;
+            }
+            // else: buffer is empty and some data has been read
+            break;
+        }
         /* file is empty. wait for data */
         while(cbuf_empty(file->buffer) && file->writers > 0) {
             DEBUG("cannot read: file is empty\n");

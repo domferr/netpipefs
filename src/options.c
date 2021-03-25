@@ -110,7 +110,7 @@ void netpipefs_usage(const char *progname) {
            "\n", progname);
     printf("netpipefs options:\n"
            "    -p <d>, --port=<d>     local port used for the socket connection (default: %d)\n"
-           "    --hostip=<s>           remote host ip address to which connect to\n"
+           "    --hostip=<s>           remote host ipv4 address to which connect to. if localhost then AF_UNIX sockets are used\n"
            "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
            "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
            "    --pipecapacity=<d>     max network pipe capacity (default: %d)\n"

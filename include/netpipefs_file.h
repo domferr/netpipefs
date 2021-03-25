@@ -60,15 +60,15 @@ int netpipefs_file_lock(struct netpipefs_file *file);
  */
 int netpipefs_file_unlock(struct netpipefs_file *file);
 
-struct netpipefs_file *netpipefs_file_open(const char *path, int mode);
+struct netpipefs_file *netpipefs_file_open(const char *path, int mode, int nonblock);
 
 struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode);
 
-int netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size);
+ssize_t netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size, int nonblock);
 
 int netpipefs_file_recv(struct netpipefs_file *file);
 
-ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size);
+ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size, int nonblock);
 
 int netpipefs_file_read_update(struct netpipefs_file *file, size_t size);
 

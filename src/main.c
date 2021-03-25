@@ -55,7 +55,7 @@ static void* init_callback(struct fuse_conn_info *conn) {
 
     /* Print a resume */
     DEBUG("dispatcher running\n");
-    DEBUG("connection established: %s\n", (strcmp(netpipefs_options.hostip, "localhost") == 0 ? "AF_UNIX":"AF_INET"));
+    DEBUG("connection established: %s\n", (strcmp(netpipefs_options.hostip, "localhost") == 0 ? AF_UNIX_LABEL:AF_INET_LABEL));
     DEBUG("host=%s:%d\n", netpipefs_options.hostip, netpipefs_options.hostport);
     DEBUG("local port=%d\n", netpipefs_options.port);
     DEBUG("local pipe capacity=%ld\n", netpipefs_options.pipecapacity);
@@ -159,15 +159,12 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
+    int nonblock = fi->flags & O_NONBLOCK;
     struct netpipefs_file *file = NULL;
 
-    if (mode == O_RDWR) {     // open the file for both reading and writing
-        DEBUG("both read and write access is not allowed\n");
-        return -EINVAL;
-    }
     printf("caller pid %d\n", fuse_get_context()->pid);
 
-    file = netpipefs_file_open(path, mode);
+    file = netpipefs_file_open(path, mode, nonblock);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
@@ -205,8 +202,9 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //path is NULL because flag_nullpath_ok = 1
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
+    int nonblock = fi->flags & O_NONBLOCK;
 
-    int bytes = netpipefs_file_read(file, buf, size);
+    int bytes = netpipefs_file_read(file, buf, size, nonblock);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -223,8 +221,10 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //path is NULL because flag_nullpath_ok = 1
     struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
+    int nonblock = fi->flags & O_NONBLOCK;
+    printf("nonblocking %d\n", nonblock);
 
-    int bytes = netpipefs_file_send(file, buf, size);
+    int bytes = netpipefs_file_send(file, buf, size, nonblock);
     if (bytes == -1) return -errno;
     return bytes;
 }
