@@ -5,19 +5,20 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include "../include/utils.h"
 #include "../include/sock.h"
 #include "../include/scfiles.h"
 
 /** Returns the size of the given sockaddr. Supports AF_UNIX and AF_INET */
 static socklen_t get_socklen(struct sockaddr *sa) {
-    if (sa->sa_family == AF_UNIX) {
-        struct sockaddr_un *sun = (struct sockaddr_un *) sa;
-        return sizeof(*sun);
+    switch(sa->sa_family) {
+        case AF_UNIX:
+            return sizeof(*((struct sockaddr_un *) sa));
+        case AF_INET: // ipv4
+            return sizeof(*((struct sockaddr_in *) sa));
     }
 
-    return sizeof(*((struct sockaddr_in *) sa)); // af inet
+    return 0; // unsupported socket family
 }
 
 int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, struct sockaddr *acc_sa, long timeout, long interval) {

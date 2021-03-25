@@ -10,14 +10,20 @@
 
 #define DEFAULT_PIPE_CAPACITY 4096
 
+struct poll_handle {
+    void *ph;
+    struct poll_handle *next;
+};
+
 /** Structure for a file in netpipefs */
-struct netpipefs_file {
+struct netpipe {
     const char *path;
     int writers;    // number of writers
     int readers;    // number of readers
     cbuf_t *buffer;   // circular buffer
     size_t remotesize;  // how many bytes there are inside the remote buffer
     size_t remotecapacity;  // how much is the buffer capacity on the remote side
+    struct poll_handle *poll_handles;
     pthread_cond_t canopen; // wait for at least one reader and one writer
     pthread_cond_t isempty; // wait if the buffer is empty
     pthread_cond_t isfull;  // wait if the buffer is full
@@ -31,16 +37,16 @@ struct netpipefs_file {
  *
  * @return the created file structure or NULL on error and it sets errno
  */
-struct netpipefs_file *netpipefs_file_alloc(const char *path);
+struct netpipe *netpipe_alloc(const char *path);
 
 /**
  * Frees the memory allocated for the given file.
  *
  * @param file the file structure
- *
+ * @param free_pollhandle function used to free each pollhandle
  * @return 0 on success, -1 on error and it sets errno
  */
-int netpipefs_file_free(struct netpipefs_file *file);
+int netpipe_free(struct netpipe *file);
 
 /**
  * Lock the given file
@@ -49,7 +55,7 @@ int netpipefs_file_free(struct netpipefs_file *file);
  *
  * @return 0 on success, -1 on error and sets errno
  */
-int netpipefs_file_lock(struct netpipefs_file *file);
+int netpipe_lock(struct netpipe *file);
 
 /**
  * Unlock the given file
@@ -58,22 +64,22 @@ int netpipefs_file_lock(struct netpipefs_file *file);
  *
  * @return 0 on success, -1 on error and sets errno
  */
-int netpipefs_file_unlock(struct netpipefs_file *file);
+int netpipe_unlock(struct netpipe *file);
 
-struct netpipefs_file *netpipefs_file_open(const char *path, int mode, int nonblock);
+struct netpipe *netpipe_open(const char *path, int mode, int nonblock);
 
-struct netpipefs_file *netpipefs_file_open_update(const char *path, int mode);
+struct netpipe *netpipe_open_update(const char *path, int mode);
 
-ssize_t netpipefs_file_send(struct netpipefs_file *file, const char *buf, size_t size, int nonblock);
+ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int nonblock);
 
-int netpipefs_file_recv(struct netpipefs_file *file);
+int netpipe_recv(struct netpipe *file);
 
-ssize_t netpipefs_file_read(struct netpipefs_file *file, char *buf, size_t size, int nonblock);
+ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock);
 
-int netpipefs_file_read_update(struct netpipefs_file *file, size_t size);
+int netpipe_read_update(struct netpipe *file, size_t size);
 
-int netpipefs_file_close(struct netpipefs_file *file, int mode);
+int netpipe_close(struct netpipe *file, int mode);
 
-int netpipefs_file_close_update(struct netpipefs_file *file, int mode);
+int netpipe_close_update(struct netpipe *file, int mode);
 
 #endif //NETPIPEFS_FILE_H

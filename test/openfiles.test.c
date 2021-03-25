@@ -16,11 +16,9 @@ int main(int argc, char** argv) {
     netpipefs_socket.remotepipecapacity = 512;
 
     test_uninitialized_table();
-    testpassed("Operations on uninitialized open files table");
-
     test_openfiles_table();
-    testpassed("Open files hash table");
 
+    testpassed("Open files hash table");
     return 0;
 }
 
@@ -48,7 +46,7 @@ static void test_uninitialized_table(void) {
 /* All the operations on the open files hash table */
 static void test_openfiles_table(void) {
     const char *path = "./filename.txt";
-    struct netpipefs_file *file;
+    struct netpipe *file;
 
     // fake socket with a pipe
     int pipefd[2];

@@ -69,14 +69,14 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
 
     /* Set the sock addresses used for connect() and accept() */
     localhost = strcmp(netpipefs_options.hostip, "localhost") == 0;
-    if (localhost) {
+    if (localhost) { // af_unix
         struct sockaddr_un acc_sa_un;
         struct sockaddr_un conn_sa_un;
         afunix_address(&conn_sa_un, netpipefs_options.hostport);
         afunix_address(&acc_sa_un, netpipefs_options.port);
         acc_sa = (struct sockaddr *) &acc_sa_un;
         conn_sa = (struct sockaddr *) &conn_sa_un;
-    } else {
+    } else { // af_inet
         struct sockaddr_in acc_sa_in;
         struct sockaddr_in conn_sa_in;
         err = afinet_address(&conn_sa_in, netpipefs_options.hostport, netpipefs_options.hostip);
@@ -95,6 +95,7 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     close(fdlisten);
     if (acc_sa->sa_family == AF_UNIX)
         MINUS1(unlink(((struct sockaddr_un *) acc_sa)->sun_path), goto error)
+
     if (fdaccepted == -1) { // double connect failed
         close(fdconnect);
         return -1;
@@ -111,12 +112,12 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     /* compare the hosts */
     comparison = hostcmp(netpipefs_options.hostip, netpipefs_options.hostport, host_received, netpipefs_options.port);
 
-    if (comparison > 0) { // use fdaccepted, acc_sa
+    if (comparison > 0) { // use fdaccepted (acc_sa)
         MINUS1(close(fdconnect), goto error)
         fdconnect = -1;
 
         netpipefs_socket->fd = fdaccepted;
-    } else if (comparison < 0) { // use fdconnect, conn_sa
+    } else if (comparison < 0) { // use fdconnect (conn_sa)
         MINUS1(close(fdaccepted), goto error)
         fdaccepted = -1;
 

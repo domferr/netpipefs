@@ -9,7 +9,7 @@
 #include "../include/dispatcher.h"
 #include "../include/utils.h"
 #include "../include/scfiles.h"
-#include "../include/netpipefs_file.h"
+#include "../include/netpipe.h"
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
@@ -29,7 +29,7 @@ static int on_open(char *path) {
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
-    EQNULL(netpipefs_file_open_update(path, mode), return -1)
+    EQNULL(netpipe_open_update(path, mode), return -1)
 
     return 1; // > 0
 }
@@ -41,9 +41,9 @@ static int on_close(char *path) {
 
     DEBUG("remote: CLOSE %s %d\n", path, mode);
 
-    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    MINUS1(netpipefs_file_close_update(file, mode), return -1)
+    MINUS1(netpipe_close_update(file, mode), return -1)
 
     return bytes; // > 0
 }
@@ -51,9 +51,9 @@ static int on_close(char *path) {
 static int on_write(char *path) {
     int bytes;
 
-    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    bytes = netpipefs_file_recv(file);
+    bytes = netpipe_recv(file);
 
     if (bytes <= 0) {
         DEBUG("remote: WRITE %s\n", path);
@@ -76,9 +76,9 @@ static int on_read(char *path) {
 
     DEBUG("remote: READ %s %ld bytes\n", path, size);
 
-    struct netpipefs_file *file = netpipefs_get_open_file(path);
+    struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    err = netpipefs_file_read_update(file, size);
+    err = netpipe_read_update(file, size);
     if (err == -1) return -1;
 
     return bytes;

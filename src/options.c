@@ -1,7 +1,7 @@
 #include "../include/options.h"
 #include "../include/netpipefs_socket.h"
 #include "../include/utils.h"
-#include "../include/netpipefs_file.h"
+#include "../include/netpipe.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>

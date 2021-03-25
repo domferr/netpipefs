@@ -42,7 +42,7 @@ int netpipefs_set_signal_handlers(sigset_t *set, struct fuse_chan *ch) {
     /* Run signal handler thread */
     PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
 
-    //PTH(err, pthread_detach(sig_handler_tid), return -1)
+    PTH(err, pthread_detach(sig_handler_tid), return -1)
     chan = ch;
     return 0;
 }
@@ -57,6 +57,6 @@ int netpipefs_remove_signal_handlers(void) {
         return -1;
     }
 
-    PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
+    //PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
     return 0;
 }

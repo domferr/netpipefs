@@ -1,7 +1,7 @@
 #ifndef OPENFILES_H
 #define OPENFILES_H
 
-#include "netpipefs_file.h"
+#include "netpipe.h"
 
 /**
  * Initialize the open files table
@@ -24,7 +24,7 @@ int netpipefs_open_files_table_destroy(void);
  *
  * @return the file structure or NULL if it doesn't exist
  */
-struct netpipefs_file *netpipefs_get_open_file(const char *path);
+struct netpipe *netpipefs_get_open_file(const char *path);
 
 /**
  * Removes the file with key path from the open file table. The file structure is also freed.
@@ -42,6 +42,6 @@ int netpipefs_remove_open_file(const char *path);
  *
  * @return the file structure or NULL if it doesn't exist
  */
-struct netpipefs_file *netpipefs_get_or_create_open_file(const char *path, int *just_created);
+struct netpipe *netpipefs_get_or_create_open_file(const char *path, int *just_created);
 
 #endif //OPENFILES_H

@@ -8,7 +8,7 @@
 #include "../include/signal_handler.h"
 #include "../include/utils.h"
 #include "../include/dispatcher.h"
-#include "../include/netpipefs_file.h"
+#include "../include/netpipe.h"
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
@@ -160,11 +160,11 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
 static int open_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
     int nonblock = fi->flags & O_NONBLOCK;
-    struct netpipefs_file *file = NULL;
+    struct netpipe *file = NULL;
 
     printf("caller pid %d\n", fuse_get_context()->pid);
 
-    file = netpipefs_file_open(path, mode, nonblock);
+    file = netpipe_open(path, mode, nonblock);
     if (file == NULL) return -errno;
 
     fi->fh = (uint64_t) file;
@@ -201,10 +201,10 @@ static int create_callback(const char *path, mode_t mode, struct fuse_file_info 
  */
 static int read_callback(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //path is NULL because flag_nullpath_ok = 1
-    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
+    struct netpipe *file = (struct netpipe *) fi->fh;
     int nonblock = fi->flags & O_NONBLOCK;
 
-    int bytes = netpipefs_file_read(file, buf, size, nonblock);
+    int bytes = netpipe_read(file, buf, size, nonblock);
     if (bytes == -1) return -errno;
     return bytes;
 }
@@ -220,13 +220,38 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
  */
 static int write_callback(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     //path is NULL because flag_nullpath_ok = 1
-    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
+    struct netpipe *file = (struct netpipe *) fi->fh;
     int nonblock = fi->flags & O_NONBLOCK;
-    printf("nonblocking %d\n", nonblock);
 
-    int bytes = netpipefs_file_send(file, buf, size, nonblock);
+    int bytes = netpipe_send(file, buf, size, nonblock);
     if (bytes == -1) return -errno;
     return bytes;
+}
+
+/**
+ * Poll for IO readiness events
+ *
+ * Note: If ph is non-NULL, the client should notify
+ * when IO readiness events occur by calling
+ * fuse_notify_poll() with the specified ph.
+ *
+ * Regardless of the number of times poll with a non-NULL ph
+ * is received, single notification is enough to clear all.
+ * Notifying more times incurs overhead but doesn't harm
+ * correctness.
+ *
+ * The callee is responsible for destroying ph with
+ * fuse_pollhandle_destroy() when no longer in use.
+ *
+ * Introduced in version 2.8
+ */
+static int poll_callback(const char *path, struct fuse_file_info *fi, struct fuse_pollhandle *ph, unsigned *reventsp) {
+    //path is NULL because flag_nullpath_ok = 1
+    struct netpipe *file = (struct netpipe *) fi->fh;
+    /*int err = netpipefs_file_poll(ph);
+    if (err == -1) return -errno;
+    //fuse_notify_poll(ph);*/
+    return 0;
 }
 
 /** Release an open file
@@ -244,9 +269,9 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
 static int release_callback(const char *path, struct fuse_file_info *fi) {
     //path is NULL because flag_nullpath_ok = 1
     int mode = fi->flags & O_ACCMODE;
-    struct netpipefs_file *file = (struct netpipefs_file *) fi->fh;
+    struct netpipe *file = (struct netpipe *) fi->fh;
 
-    int ret = netpipefs_file_close(file, mode);
+    int ret = netpipe_close(file, mode);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
@@ -289,6 +314,7 @@ static const struct fuse_operations netpipefs_oper = {
     .release = release_callback,
     .truncate = truncate_callback,
     .readdir = readdir_callback,
+    .poll = poll_callback,
     .flag_nullpath_ok = 1,
     .flag_nopath = 1
     /* The following operations will not receive path information:
