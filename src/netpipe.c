@@ -226,8 +226,8 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
             bufptr += datasent;
 
             file->remotesize += datasent;
-            /* wake up waiting readers */ // TODO this is probably not needed
-            PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipe_unlock(file); return -1)
+            /* wake up waiting readers */ // this is probably not needed
+            //PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipe_unlock(file); return -1)
             DEBUGFILE(file);
         }
     }
@@ -337,8 +337,8 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
             remaining -= datagot;
             bufptr += datagot;
 
-            /* wake up waiting writers */ // TODO this is not needed
-            PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipe_unlock(file); return -1)
+            /* wake up waiting writers */ // this is not needed
+            //PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipe_unlock(file); return -1)
 
             /* Send READ message */
             bytes_wrote = send_read_message(&netpipefs_socket, file->path, datagot);
@@ -455,16 +455,18 @@ int netpipefs_file_poll(struct netpipe *file, void *ph, unsigned int *reventsp) 
     if (!cbuf_empty(file->buffer)) {
         // can read because there is data, no matter how many writers there are
         *reventsp |= POLLIN;
-    } else if (file->writers == 0) { // no data is available, can't read
+    }
+    if (file->writers == 0) { // no data is available, can't read
         *reventsp |= POLLHUP;
-        DEBUG("pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup \n");
     }
 
-    // writable
-    if (file->readers == 0) { // no readers. cannot write
+    // no readers. cannot write
+    if (file->readers == 0) {
         *reventsp |= POLLERR;
-    } else if (!cbuf_full(file->buffer)) {
-        // there is at least one reader and buffer isn't full. can write
+    }
+    // writable
+    if (!cbuf_full(file->buffer)) {
+        // buffer isn't full. can write
         *reventsp |= POLLOUT;
     }
 

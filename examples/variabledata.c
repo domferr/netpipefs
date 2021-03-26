@@ -21,9 +21,6 @@
 #define PRODUCER_FILEPATH "./tmp/prod/mypipe.txt"
 #define CONSUMER_FILEPATH "./tmp/cons/mypipe.txt"
 
-/**
- * Function executed by the send_data process
- */
 static int producer(char *arg1, char *arg2) {
     int wrote = 1, fd;
     char *endptr;
@@ -59,9 +56,6 @@ static int producer(char *arg1, char *arg2) {
     return 0;
 }
 
-/**
- * Function executed by the recv_data process
- */
 static int consumer(char *arg1, char *arg2) {
     int read = 1, fd;
     char *endptr;

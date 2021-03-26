@@ -64,9 +64,6 @@ static arg_t *arg_alloc(int fd, const char *path, size_t datablock, size_t iter)
     return arg;
 }
 
-/**
- * Function executed by the send_data process
- */
 static int send_data(arg_t *arg) {
     struct timespec start;
     int wrote = 1, doclose = 0;
@@ -121,9 +118,6 @@ static int send_data(arg_t *arg) {
     return wrote;
 }
 
-/**
- * Function executed by the consumer thread
- */
 static void *recv_data(void *arguments) {
     struct timespec start;
     arg_t *arg = (arg_t*) arguments;

@@ -248,6 +248,7 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
 static int poll_callback(const char *path, struct fuse_file_info *fi, struct fuse_pollhandle *ph, unsigned *reventsp) {
     //path is NULL because flag_nullpath_ok = 1
     struct netpipe *file = (struct netpipe *) fi->fh;
+    if (ph == NULL) return 0;
 
     int err = netpipefs_file_poll(file, ph, reventsp);
     if (err == -1) return -errno;

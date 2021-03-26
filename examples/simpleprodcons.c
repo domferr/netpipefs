@@ -22,9 +22,6 @@
 #define CONSUMER_FILEPATH "./tmp/cons/mypipe.txt"
 #define MAXNUMBERS 10
 
-/**
- * Function executed by the send_data process
- */
 static int producer() {
     int fd, prec1 = 0, prec2 = 1, next = 1, counter = 2, maxnumbers = MAXNUMBERS;
 
@@ -53,9 +50,6 @@ static int producer() {
     return 0;
 }
 
-/**
- * Function executed by the recv_data process
- */
 static int consumer() {
     int fd, read, maxnumbers;
 

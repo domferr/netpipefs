@@ -19,7 +19,7 @@ static void *signal_handler_thread(void *arg) {
     // TODO close all files
 
     // unmount the filesystem
-    if (netpipefs_options.mountpoint)
+    if (netpipefs_options.mountpoint && chan)
         fuse_unmount(netpipefs_options.mountpoint, chan);
 
     return 0;
