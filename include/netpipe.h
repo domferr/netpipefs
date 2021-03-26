@@ -46,7 +46,7 @@ struct netpipe *netpipe_alloc(const char *path);
  * @param free_pollhandle function used to free each pollhandle
  * @return 0 on success, -1 on error and it sets errno
  */
-int netpipe_free(struct netpipe *file);
+int netpipe_free(struct netpipe *file, void (*free_pollhandle)(void *));
 
 /**
  * Lock the given file
@@ -72,14 +72,16 @@ struct netpipe *netpipe_open_update(const char *path, int mode);
 
 ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int nonblock);
 
-int netpipe_recv(struct netpipe *file);
+int netpipe_recv(struct netpipe *file, void (*poll_notify)(void *));
 
 ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock);
 
-int netpipe_read_update(struct netpipe *file, size_t size);
+int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(void *));
 
-int netpipe_close(struct netpipe *file, int mode);
+int netpipefs_file_poll(struct netpipe *file, void *ph, unsigned int *reventsp);
 
-int netpipe_close_update(struct netpipe *file, int mode);
+int netpipe_close(struct netpipe *file, int mode, void (*free_pollhandle)(void *));
+
+int netpipe_close_update(struct netpipe *file, int mode, void (*poll_notify)(void *), void (*free_pollhandle)(void *));
 
 #endif //NETPIPEFS_FILE_H

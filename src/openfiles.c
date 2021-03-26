@@ -79,7 +79,7 @@ struct netpipe *netpipefs_get_or_create_open_file(const char *path, int *just_cr
 
     if (file != NULL && *just_created) {
         if (icl_hash_insert(open_files_table, (void*) file->path, file) == NULL) {
-            netpipe_free(file);
+            netpipe_free(file, NULL); // there are no poll handle
             file = NULL;
         }
     }

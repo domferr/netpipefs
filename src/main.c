@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <poll.h>
 #include "../include/signal_handler.h"
 #include "../include/utils.h"
 #include "../include/dispatcher.h"
@@ -15,6 +16,7 @@
 /* Socket communication */
 struct netpipefs_socket netpipefs_socket;
 
+struct fuse_pollhandle *ph_ex = NULL;
 /**
  * Initialize filesystem
  *
@@ -162,8 +164,6 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     int nonblock = fi->flags & O_NONBLOCK;
     struct netpipe *file = NULL;
 
-    printf("caller pid %d\n", fuse_get_context()->pid);
-
     file = netpipe_open(path, mode, nonblock);
     if (file == NULL) return -errno;
 
@@ -248,9 +248,10 @@ static int write_callback(const char *path, const char *buf, size_t size, off_t 
 static int poll_callback(const char *path, struct fuse_file_info *fi, struct fuse_pollhandle *ph, unsigned *reventsp) {
     //path is NULL because flag_nullpath_ok = 1
     struct netpipe *file = (struct netpipe *) fi->fh;
-    /*int err = netpipefs_file_poll(ph);
+
+    int err = netpipefs_file_poll(file, ph, reventsp);
     if (err == -1) return -errno;
-    //fuse_notify_poll(ph);*/
+
     return 0;
 }
 
@@ -271,7 +272,7 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
     struct netpipe *file = (struct netpipe *) fi->fh;
 
-    int ret = netpipe_close(file, mode);
+    int ret = netpipe_close(file, mode, (void (*)(void *)) &fuse_pollhandle_destroy);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
@@ -397,5 +398,4 @@ end:
     free(netpipefs_options.mountpoint);
 
     return ret != 0 ? EXIT_FAILURE:EXIT_SUCCESS;
-
 }

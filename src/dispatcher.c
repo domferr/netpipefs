@@ -21,6 +21,7 @@ struct dispatcher {
 struct dispatcher dispatcher = {0, {-1,-1} };
 
 extern struct netpipefs_socket netpipefs_socket;
+extern struct fuse_pollhandle *ph_ex;
 
 static int on_open(char *path) {
     int bytes, mode;
@@ -34,6 +35,11 @@ static int on_open(char *path) {
     return 1; // > 0
 }
 
+static void poll_notify(void *ph) {
+    fuse_notify_poll((struct fuse_pollhandle *) ph);
+    fuse_pollhandle_destroy((struct fuse_pollhandle *) ph);
+}
+
 static int on_close(char *path) {
     int bytes, mode;
     bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
@@ -43,7 +49,7 @@ static int on_close(char *path) {
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    MINUS1(netpipe_close_update(file, mode), return -1)
+    MINUS1(netpipe_close_update(file, mode, &poll_notify, (void (*)(void *)) &fuse_pollhandle_destroy), return -1)
 
     return bytes; // > 0
 }
@@ -53,7 +59,7 @@ static int on_write(char *path) {
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    bytes = netpipe_recv(file);
+    bytes = netpipe_recv(file, &poll_notify);
 
     if (bytes <= 0) {
         DEBUG("remote: WRITE %s\n", path);
@@ -65,6 +71,7 @@ static int on_write(char *path) {
     }
 
     DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
+
     return bytes;
 }
 
@@ -78,7 +85,7 @@ static int on_read(char *path) {
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    err = netpipe_read_update(file, size);
+    err = netpipe_read_update(file, size, &poll_notify);
     if (err == -1) return -1;
 
     return bytes;

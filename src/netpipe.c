@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <poll.h>
 #include "../include/netpipe.h"
 #include "../include/utils.h"
 #include "../include/openfiles.h"
@@ -66,20 +67,25 @@ error:
     return NULL;
 }
 
-int netpipe_free(struct netpipe *file){//, void (*free_pollhandle)(void *)) {
+int netpipe_free(struct netpipe *file, void (*free_pollhandle)(void *)) {
     int ret = 0, err;
-    struct poll_handle *ph;
+
     if ((err = pthread_mutex_destroy(&(file->mtx))) != 0) { errno = err; ret = -1; }
     if ((err = pthread_cond_destroy(&(file->canopen))) != 0) { errno = err; ret = -1; }
     if ((err = pthread_cond_destroy(&(file->isfull))) != 0) { errno = err; ret = -1; }
     if ((err = pthread_cond_destroy(&(file->isempty))) != 0) { errno = err; ret = -1; }
     cbuf_free(file->buffer);
     free((void*) file->path);
-    ph = file->poll_handles;
+
+    struct poll_handle *ph = file->poll_handles;
+    struct poll_handle *oldph;
     while(ph != NULL) {
-        //if (free_pollhandle) free_pollhandle(ph->ph);
+        if (free_pollhandle) free_pollhandle(ph->ph);
+        oldph = ph;
         ph = ph->next;
+        free(oldph);
     }
+
     free(file);
 
     return ret;
@@ -146,7 +152,7 @@ unopen:
 error:
     if (just_created) {
         netpipefs_remove_open_file(path);
-        netpipe_free(file);
+        netpipe_free(file, NULL); // for sure there is no poll handle
     }
     return NULL;
 }
@@ -177,7 +183,7 @@ struct netpipe *netpipe_open_update(const char *path, int mode) {
     error:
     if (just_created) {
         netpipefs_remove_open_file(path);
-        netpipe_free(file);
+        netpipe_free(file, NULL); // for sure there is no poll handle
     }
     return NULL;
 }
@@ -220,7 +226,7 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
             bufptr += datasent;
 
             file->remotesize += datasent;
-            /* wake up waiting readers */
+            /* wake up waiting readers */ // TODO this is probably not needed
             PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipe_unlock(file); return -1)
             DEBUGFILE(file);
         }
@@ -238,7 +244,21 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     return size - remaining;
 }
 
-int netpipe_recv(struct netpipe *file) {
+static void loop_poll_notify(struct netpipe *file, void (*poll_notify)(void *)) {
+    if (!poll_notify) return;
+
+    struct poll_handle *currph = file->poll_handles;
+    struct poll_handle *oldph;
+    while(currph) {
+        poll_notify(currph->ph); // caller should free currph->ph
+        oldph = currph;
+        currph = currph->next;
+        free(oldph);
+    }
+    file->poll_handles = NULL;
+}
+
+int netpipe_recv(struct netpipe *file, void (*poll_notify)(void *)) {
     int err;
     size_t size = 0;
     err = readn(netpipefs_socket.fd, &size, sizeof(size_t));
@@ -249,6 +269,7 @@ int netpipe_recv(struct netpipe *file) {
 
     size_t remaining = size;
     ssize_t dataput;
+    int wasempty = cbuf_empty(file->buffer);
     while (remaining > 0 && file->readers > 0) {
         /* file is full. wait for data */
         while(cbuf_full(file->buffer) && file->readers > 0) {
@@ -266,7 +287,7 @@ int netpipe_recv(struct netpipe *file) {
             remaining -= dataput;
 
             /* wake up waiting readers */
-            PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipe_unlock(file); return -1)
+            if (wasempty) PTH(err, pthread_cond_broadcast(&(file->isempty)), netpipe_unlock(file); return -1)
 
             DEBUGFILE(file);
         }
@@ -278,6 +299,8 @@ int netpipe_recv(struct netpipe *file) {
         netpipe_unlock(file);
         return -1;
     }
+
+    loop_poll_notify(file, poll_notify);
 
     NOTZERO(netpipe_unlock(file), return -1)
     return size;
@@ -314,7 +337,7 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
             remaining -= datagot;
             bufptr += datagot;
 
-            /* wake up waiting writers */
+            /* wake up waiting writers */ // TODO this is not needed
             PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipe_unlock(file); return -1)
 
             /* Send READ message */
@@ -335,23 +358,24 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
     return size - remaining;
 }
 
-int netpipe_read_update(struct netpipe *file, size_t size) {
-    int err;
+int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(void *)) {
+    int err, wasfull;
 
     NOTZERO(netpipe_lock(file), return -1)
 
     /* update remote size and wake up writers */
+    wasfull = file->remotesize == file->remotecapacity;
     file->remotesize -= size;
-    PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipe_unlock(file); return -1)
+    if (wasfull) PTH(err, pthread_cond_broadcast(&(file->isfull)), netpipe_unlock(file); return -1)
     DEBUGFILE(file);
+    loop_poll_notify(file, poll_notify);
 
     NOTZERO(netpipe_unlock(file), return -1)
 
     return 0;
 }
 
-
-int netpipe_close(struct netpipe *file, int mode) {
+int netpipe_close(struct netpipe *file, int mode, void (*free_pollhandle)(void *)) {
     int bytes, err, free_memory = 0;
 
     NOTZERO(netpipe_lock(file), return -1)
@@ -375,7 +399,7 @@ int netpipe_close(struct netpipe *file, int mode) {
     if (free_memory) {
         MINUS1(netpipefs_remove_open_file(file->path), err = -1)
         NOTZERO(netpipe_unlock(file), err = -1)
-        MINUS1(netpipe_free(file), err = -1)
+        MINUS1(netpipe_free(file, free_pollhandle), err = -1)
     } else {
         NOTZERO(netpipe_unlock(file), err = -1)
     }
@@ -385,7 +409,7 @@ int netpipe_close(struct netpipe *file, int mode) {
     return bytes; // > 0
 }
 
-int netpipe_close_update(struct netpipe *file, int mode) {
+int netpipe_close_update(struct netpipe *file, int mode, void (*poll_notify)(void *), void (*free_pollhandle)(void *)) {
     int err;
 
     NOTZERO(netpipe_lock(file), return -1)
@@ -399,25 +423,52 @@ int netpipe_close_update(struct netpipe *file, int mode) {
     }
 
     DEBUGFILE(file);
+
+    loop_poll_notify(file, poll_notify);
+
     if (file->writers == 0 && file->readers == 0) {
+        err = 0;
         MINUS1(netpipefs_remove_open_file(file->path), err = -1)
-        NOTZERO(netpipe_unlock(file), err = -1)
-        MINUS1(netpipe_free(file), err = -1)
-    } else {
-        NOTZERO(netpipe_unlock(file), err = -1)
+        MINUS1(netpipe_unlock(file), err = -1)
+        MINUS1(netpipe_free(file, free_pollhandle), err = -1)
+
+        return err;
     }
 
-    if (err == -1) return -1;
+    NOTZERO(netpipe_unlock(file), return -1)
 
     return 0;
 }
 
-int netpipefs_file_poll(struct netpipe *file, void *ph) {
+int netpipefs_file_poll(struct netpipe *file, void *ph, unsigned int *reventsp) {
     struct poll_handle *newph = (struct poll_handle *) malloc(sizeof(struct poll_handle));
     if (newph == NULL) return -1;
     newph->ph = ph;
+
+    MINUS1(netpipe_lock(file), return -1)
+
+    // add poll handle
     newph->next = file->poll_handles;
     file->poll_handles = newph;
+
+    // readable
+    if (!cbuf_empty(file->buffer)) {
+        // can read because there is data, no matter how many writers there are
+        *reventsp |= POLLIN;
+    } else if (file->writers == 0) { // no data is available, can't read
+        *reventsp |= POLLHUP;
+        DEBUG("pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup pollhup \n");
+    }
+
+    // writable
+    if (file->readers == 0) { // no readers. cannot write
+        *reventsp |= POLLERR;
+    } else if (!cbuf_full(file->buffer)) {
+        // there is at least one reader and buffer isn't full. can write
+        *reventsp |= POLLOUT;
+    }
+
+    MINUS1(netpipe_unlock(file), return -1)
 
     return 0;
 }

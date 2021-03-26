@@ -21,7 +21,7 @@
 
 #define PRODUCER_FILEPATH "./tmp/prod/mypipe.txt"
 #define CONSUMER_FILEPATH "./tmp/cons/mypipe.txt"
-#define MAXNUMBERS 20
+#define MAXNUMBERS 5
 
 /**
  * Function executed by the send_data process
@@ -31,7 +31,6 @@ static int producer() {
 
     // Open file
     MINUS1ERR(fd = open(PRODUCER_FILEPATH, O_WRONLY), return EXIT_FAILURE)
-
     printf("Writing %d %d ", prec1, prec2);
     ISNEGATIVEERR(writen(fd, &prec1, sizeof(int)), return EXIT_FAILURE)
     ISNEGATIVEERR(writen(fd, &prec2, sizeof(int)), return EXIT_FAILURE)
@@ -47,7 +46,6 @@ static int producer() {
     }
     printf("\n");
 
-    sleep(2);
     // Close
     MINUS1ERR(close(fd), return EXIT_FAILURE);
     return 0;
@@ -68,19 +66,18 @@ static int consumer() {
 
     while (read > 0) {
         rset = set;
-        printf("select\n");
         read = select(fd+1, &rset, NULL, NULL, NULL);
         if (read == 0)
             errno = ETIMEDOUT;
         else if (read > 0) {
             // Read from netpipe
             read = readn(fd, &number, sizeof(int));
-            if (read > 0) printf("num is %d ", number);
+            if (read > 0) printf("%d ", number);
         }
     }
-    if (read == 0) {
-        printf("\n");
-    } else if (read == -1) {
+    printf("\n");
+
+    if (read == -1) {
         perror("consumer read");
         return EXIT_FAILURE;
     }
