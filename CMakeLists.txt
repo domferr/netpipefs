@@ -27,12 +27,7 @@ add_executable(cbuf.test test/cbuf.test.c src/cbuf.c include/cbuf.h test/testuti
 # EXAMPLES
 # simpleprodcons
 add_executable(simpleprodcons examples/simpleprodcons.c src/scfiles.c include/scfiles.h)
-# variabledata
-add_executable(variabledata examples/variabledata.c src/scfiles.c include/scfiles.h)
-# benchmark
-add_executable(benchmark examples/benchmark.c src/scfiles.c include/scfiles.h src/utils.c include/utils.h)
-target_link_libraries(benchmark PRIVATE Threads::Threads)
 # nonblockingio
 add_executable(nonblockingio examples/nonblockingio.c src/scfiles.c include/scfiles.h)
-# select
-add_executable(select examples/select.c src/scfiles.c include/scfiles.h)
+# ddsel
+add_executable(ddsel examples/ddsel.c src/scfiles.c include/scfiles.h)
