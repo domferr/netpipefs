@@ -28,6 +28,6 @@ add_executable(cbuf.test test/cbuf.test.c src/cbuf.c include/cbuf.h test/testuti
 # simpleprodcons
 add_executable(simpleprodcons examples/simpleprodcons.c src/scfiles.c include/scfiles.h)
 # nonblockingio
-add_executable(nonblockingio examples/nonblockingio.c src/scfiles.c include/scfiles.h)
+add_executable(nonblockingio examples/nonblockingio.c src/scfiles.c include/scfiles.h examples/benchmark.c)
 # ddsel
 add_executable(ddsel examples/ddsel.c src/scfiles.c include/scfiles.h)

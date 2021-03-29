@@ -376,7 +376,7 @@ int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(v
 }
 
 int netpipe_close(struct netpipe *file, int mode, void (*free_pollhandle)(void *)) {
-    int bytes, err, free_memory = 0;
+    int bytes, err;
 
     NOTZERO(netpipe_lock(file), return -1)
 
@@ -389,14 +389,11 @@ int netpipe_close(struct netpipe *file, int mode, void (*free_pollhandle)(void *
     }
 
     DEBUGFILE(file);
-    if (file->writers == 0 && file->readers == 0) {
-        free_memory = 1;
-    }
 
     bytes = send_close_message(&netpipefs_socket, file->path, mode);
     if (bytes <= 0) return bytes;
 
-    if (free_memory) {
+    if (file->writers == 0 && file->readers == 0) {
         MINUS1(netpipefs_remove_open_file(file->path), err = -1)
         NOTZERO(netpipe_unlock(file), err = -1)
         MINUS1(netpipe_free(file, free_pollhandle), err = -1)

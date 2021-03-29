@@ -392,6 +392,7 @@ int main(int argc, char** argv) {
 
     if (netpipefs_remove_signal_handlers() == -1)
         perror("unable to stop signal handler");
+
 destroy:
     fuse_destroy(fuse);
 end:

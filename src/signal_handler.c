@@ -9,6 +9,7 @@ struct fuse_chan *chan;
 /* Thread signal handler */
 pthread_t sig_handler_tid;
 
+/** Function executed by the signal handler. The argument is the set of signal that should be caught */
 static void *signal_handler_thread(void *arg) {
     sigset_t *set = arg;
     int err, sig;
@@ -40,11 +41,12 @@ int netpipefs_set_signal_handlers(sigset_t *set, struct fuse_chan *ch) {
     /* Do not handle SIGPIPE */
     MINUS1(sigdelset(set, SIGPIPE), return -1)
 
-    /* Run signal handler thread */
-    PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), return -1)
-
-    PTH(err, pthread_detach(sig_handler_tid), return -1)
     chan = ch;
+    /* Run signal handler thread */
+    PTH(err, pthread_create(&sig_handler_tid, NULL, &signal_handler_thread, set), if (chan) chan = NULL; return -1)
+
+    //PTH(err, pthread_detach(sig_handler_tid), return -1)
+
     return 0;
 }
 
@@ -58,6 +60,6 @@ int netpipefs_remove_signal_handlers(void) {
         return -1;
     }
 
-    //PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
+    PTH(err, pthread_join(sig_handler_tid, NULL), return -1)
     return 0;
 }
