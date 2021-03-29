@@ -1,8 +1,13 @@
 /*
+ * This program will run like dd on multiple files in parallel by using
+ * the select() system call.
  *
  * Run the following command to build this example
  * gcc -Wall examples/ddsel.c src/scfiles.c -o bin/ddsel -lpthread -lm
  *
+ * For example, with the following parameters ddsel will read and
+ * write 8192 bytes 50 times into 100 netpipes:
+ *     ddsel np=100 bs=8192 count=50
  */
 
 #include <math.h>
@@ -29,12 +34,13 @@
 #define TIMESPEC_TO_DOUBLE(ts) ((double)((ts).tv_sec) + ((double)((ts).tv_nsec) / 1000000000))
 
 static size_t num_netpipes = DEFAULT_NUM_NETPIPES;
-static size_t blocksize = DEFAULT_BLOCKSIZE;
+static size_t out_blocksize = DEFAULT_BLOCKSIZE;
+static size_t in_blocksize = DEFAULT_BLOCKSIZE;
 static size_t count = DEFAULT_COUNT;
 
-static int open_k_files(char *base, int *destfd, int k, int oflag, ...) {
+static int open_k_files(char *base, int *destfd, int k, int oflag, struct timespec *start, ...) {
     va_list va_args;
-    va_start(va_args, oflag);
+    va_start(va_args, start);
     size_t max_path_len = (size_t) ceil(log10(num_netpipes)) + 1 + strlen(base);
 
     // alloc path
@@ -49,6 +55,12 @@ static int open_k_files(char *base, int *destfd, int k, int oflag, ...) {
 
     for (int i = 0; i < k; ++i) {
         sprintf(path_concat_point, "%d", i);
+        /* Get current time */
+        if (clock_gettime(CLOCK_MONOTONIC, &start[i]) == -1) {
+            free(path);
+            return -1;
+        }
+        /* Open the file */
         destfd[i] = open(path, oflag, va_args);
         if (destfd[i] == -1) {
             free(path);
@@ -77,11 +89,14 @@ static void printsize(size_t size) {
 
 static void usage(char *progname) {
     printf("usage: %s [OPTIONS]\n", progname);
-    printf("    -h          print usage\n"
-                  "    np=<d>      number of netpipes (default: %d)\n"
-                  "    bs=<d>      block size (default: %d)\n"
-                  "    count=<d>   number of times to send data (default: %d)\n",
-                  DEFAULT_NUM_NETPIPES, DEFAULT_BLOCKSIZE, DEFAULT_COUNT);
+    printf("    -h           print usage\n"
+                  "    np=N         write to N netpipes (default: %d)\n"
+                  "    ibs=BYTES    read up to BYTES bytes at a time (default: %d)\n"
+                  "    obs=BYTES    write BYTES bytes at a time (default: %d)\n"
+                  "    bs=BYTES     read and write up to BYTES bytes at a time (default: %d)\n"
+                  "                 overrides ibs and obs\n"
+                  "    count=N      copy only N input blocks (default: %d)\n",
+                  DEFAULT_NUM_NETPIPES, DEFAULT_BLOCKSIZE, DEFAULT_BLOCKSIZE, DEFAULT_BLOCKSIZE, DEFAULT_COUNT);
 }
 
 static int parse_size_flag(char *given_opt, const char *format, size_t *result) {
@@ -120,11 +135,28 @@ static int parse_options(int argc, char **argv) {
             continue;
         }
 
+        // check for obs=<d>
+        found = parse_size_flag(argv[i], "obs=", &size_val);
+        if (found) {
+            if (size_val == 0) return EXIT_FAILURE;
+            out_blocksize = size_val;
+            continue;
+        }
+
+        // check for ibs=<d>
+        found = parse_size_flag(argv[i], "ibs=", &size_val);
+        if (found) {
+            if (size_val == 0) return EXIT_FAILURE;
+            in_blocksize = size_val;
+            continue;
+        }
+
         // check for bs=<d>
         found = parse_size_flag(argv[i], "bs=", &size_val);
         if (found) {
             if (size_val == 0) return EXIT_FAILURE;
-            blocksize = size_val;
+            out_blocksize = size_val;
+            in_blocksize = size_val;
             continue;
         }
 
@@ -143,63 +175,32 @@ static int parse_options(int argc, char **argv) {
 }
 
 static void *consumer(void *arg) {
-    int i, err, failure = 0, maxfd, *fd = NULL, *read = NULL;
+    int i, err, failure = 0, maxfd, *fd = NULL, bytes_read = 0;
     struct timespec *start = NULL, elapsed;
     double *time = NULL;
     fd_set rset;
     char *buf = NULL;
 
-    EQNULLERR(buf = (char*) malloc(sizeof(char) * blocksize), failure = 1; goto cleanup)
-
+    EQNULLERR(buf = (char*) malloc(sizeof(char) * in_blocksize), failure = 1; goto cleanup)
     EQNULLERR(fd = (int *) malloc(sizeof(int) * num_netpipes), failure = 1; goto cleanup)
-
-    EQNULLERR(read = (int *) malloc(sizeof(int) * num_netpipes), failure = 1; goto cleanup)
-
     EQNULLERR(time = (double *) malloc(sizeof(double) * num_netpipes), failure = 1; goto cleanup)
-
     EQNULLERR(start = (struct timespec *) malloc(sizeof(struct timespec) * num_netpipes), failure = 1; goto cleanup)
 
-    /* Get current time */
-    if (clock_gettime(CLOCK_MONOTONIC, &start[0]) == -1) {
-        failure = 1;
-        goto cleanup;
-    }
-
     // Open all the netpipes
-    if (open_k_files(DEFAULT_CONS_NETPIPE, fd, num_netpipes, O_RDONLY) == -1) {
+    if (open_k_files(DEFAULT_CONS_NETPIPE, fd, num_netpipes, O_RDONLY, start) == -1) {
         failure = 1;
         goto cleanup;
     }
 
-    for(i=0; i < num_netpipes; i++) {
-        read[i] = 0;
-        start[i] = start[0];
-    }
     err = 1;
     while (err > 0) {
         FD_ZERO(&rset);
         maxfd = -1;
         for(i=0; i < num_netpipes; i++) {
             if (fd[i] == -1) continue;
-            if (read[i] < count) {
-                FD_SET(fd[i], &rset);
-                if (fd[i] > maxfd)
-                    maxfd = fd[i];
-            } else {
-                close(fd[i]);
-                fd[i] = -1;
-                if (clock_gettime(CLOCK_MONOTONIC, &elapsed) != -1) {
-                    elapsed.tv_sec = elapsed.tv_sec - start[i].tv_sec;
-                    elapsed.tv_nsec = elapsed.tv_nsec - start[i].tv_nsec;
-                    if (elapsed.tv_nsec < 0) {
-                        elapsed.tv_sec -= 1;
-                        elapsed.tv_nsec += 1000000000L; //1e9
-                    }
-                    time[i] = TIMESPEC_TO_DOUBLE(elapsed);
-                } else {
-                    time[i] = -1;
-                }
-            }
+            FD_SET(fd[i], &rset);
+            if (fd[i] > maxfd)
+                maxfd = fd[i];
         }
         if (maxfd == -1) {
             err = 1;
@@ -213,8 +214,25 @@ static void *consumer(void *arg) {
             // Read from readable netpipes
             for(i=0; i < num_netpipes; i++) {
                 if (FD_ISSET(fd[i], &rset)) {
-                    err = readn(fd[i], buf, blocksize);
-                    if (err > 0) read[i]++;
+                    err = readn(fd[i], buf, in_blocksize);
+                    if (i == 0 && err > 0) bytes_read += err;
+                    if (err == 0) {
+                        close(fd[i]);
+                        fd[i] = -1;
+                        if (clock_gettime(CLOCK_MONOTONIC, &elapsed) != -1) {
+                            elapsed.tv_sec = elapsed.tv_sec - start[i].tv_sec;
+                            elapsed.tv_nsec = elapsed.tv_nsec - start[i].tv_nsec;
+                            if (elapsed.tv_nsec < 0) {
+                                elapsed.tv_sec -= 1;
+                                elapsed.tv_nsec += 1000000000L; //1e9
+                            }
+                            time[i] = TIMESPEC_TO_DOUBLE(elapsed);
+                            err = 1;
+                        } else {
+                            time[i] = -1;
+                            err = -1;
+                        }
+                    }
                 }
             }
         }
@@ -231,7 +249,7 @@ static void *consumer(void *arg) {
         perror("consumer error");
     } else {
         printf("Read: ");
-        printsize(count * sizeof(char) * blocksize);
+        printsize(bytes_read * sizeof(char));
         printf(" bytes\n      [");
         for (i = 0; i < num_netpipes; i++) {
             printf("%.2fs", time[i]);
@@ -246,7 +264,6 @@ static void *consumer(void *arg) {
     cleanup:
     if (buf) free(buf);
     if (fd) free(fd);
-    if (read) free(read);
     if (time) free(time);
     if (start) free(start);
 
@@ -273,30 +290,21 @@ int main(int argc, char** argv) {
         usage(argv[0]);
         return 0;
     }
-    printf("Writing and reading %ld bytes %ld times into %ld netpipes\n", (blocksize), count, num_netpipes);
+    printf("Writing blocks of %ld bytes %ld times into %ld netpipes\n", (out_blocksize), count, num_netpipes);
+    printf("Reading blocks of %ld bytes from %ld netpipes\n", (in_blocksize), num_netpipes);
 
-    EQNULLERR(buf = (char*) malloc(sizeof(char) * blocksize), goto cleanup)
-    memset(buf, 0, blocksize);
-
+    EQNULLERR(buf = (char*) malloc(sizeof(char) * out_blocksize), goto cleanup)
+    memset(buf, 0, out_blocksize);
     EQNULLERR(fd = (int *) malloc(sizeof(int) * num_netpipes), goto cleanup)
-
     EQNULLERR(sent = (int *) malloc(sizeof(int) * num_netpipes), goto cleanup)
-
     EQNULLERR(start = (struct timespec *) malloc(sizeof(struct timespec) * num_netpipes), goto cleanup)
-
     EQNULLERR(time = (double *) malloc(sizeof(double) * num_netpipes), goto cleanup)
 
     // Create thread for receiving data (consumer)
     PTHERR(err, pthread_create(&pcons, NULL, &consumer, NULL), goto cleanup)
 
-    /* Get current time */
-    if (clock_gettime(CLOCK_MONOTONIC, &start[0]) == -1) {
-        force_exit = 1;
-        goto cleanup;
-    }
-
     // Open all the netpipes
-    if (open_k_files(DEFAULT_PROD_NETPIPE, fd, num_netpipes, O_WRONLY) == -1) {
+    if (open_k_files(DEFAULT_PROD_NETPIPE, fd, num_netpipes, O_WRONLY, start) == -1) {
         perror("producer can't open");
         force_exit = 1;
         goto cleanup;
@@ -344,7 +352,7 @@ int main(int argc, char** argv) {
             // Write to writable netpipes
             for(i=0; i < num_netpipes; i++) {
                 if (FD_ISSET(fd[i], &wset)) {
-                    err = writen(fd[i], buf, blocksize);
+                    err = writen(fd[i], buf, out_blocksize);
                     if (err > 0) sent[i]++;
                 }
             }
@@ -365,8 +373,8 @@ int main(int argc, char** argv) {
     if (err == -1) { // Print consumer error
         perror("producer error");
     } else {
-        printf("Wrote: ");
-        printsize(count * sizeof(char) * blocksize);
+        printf("Wrote:");
+        printsize(count * sizeof(char) * out_blocksize);
         printf(" bytes\n      [");
         for (i = 0; i < num_netpipes; i++) {
             printf("%.2fs", time[i]);
