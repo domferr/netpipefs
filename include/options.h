@@ -21,6 +21,8 @@ struct netpipefs_options {
     int hostport;
     int delayconnect;
     size_t pipecapacity;
+    int intr;
+    int intr_signal;
 };
 
 /** Command line options. Declared in options.c */

@@ -10,14 +10,11 @@
 
 #define DEFAULT_PIPE_CAPACITY 4096
 
-struct poll_handle {
-    void *ph;
-    struct poll_handle *next;
-};
-
 /** Structure for a file in netpipefs */
 struct netpipe {
     const char *path;
+    int open_mode;
+    int force_exit;
     int writers;    // number of writers
     int readers;    // number of readers
     cbuf_t *buffer;   // circular buffer
@@ -25,8 +22,8 @@ struct netpipe {
     size_t remotecapacity;  // how much is the buffer capacity on the remote side
     struct poll_handle *poll_handles;
     pthread_cond_t canopen; // wait for at least one reader and one writer
-    pthread_cond_t isempty; // wait if the buffer is empty
-    pthread_cond_t isfull;  // wait if the buffer is full
+    pthread_cond_t rd_mtx; // wait if the buffer is empty
+    pthread_cond_t wr_mtx;  // wait if the buffer is full
     pthread_mutex_t mtx;
 };
 
@@ -34,7 +31,6 @@ struct netpipe {
  * Allocates new memory for a new file structure with the given path.
  *
  * @param path file's path
- *
  * @return the created file structure or NULL on error and it sets errno
  */
 struct netpipe *netpipe_alloc(const char *path);
@@ -52,7 +48,6 @@ int netpipe_free(struct netpipe *file, void (*free_pollhandle)(void *));
  * Lock the given file
  *
  * @param file file to be locked
- *
  * @return 0 on success, -1 on error and sets errno
  */
 int netpipe_lock(struct netpipe *file);
@@ -61,7 +56,6 @@ int netpipe_lock(struct netpipe *file);
  * Unlock the given file
  *
  * @param file file to be unlocked
- *
  * @return 0 on success, -1 on error and sets errno
  */
 int netpipe_unlock(struct netpipe *file);
@@ -78,10 +72,14 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
 
 int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(void *));
 
-int netpipefs_file_poll(struct netpipe *file, void *ph, unsigned int *reventsp);
+int netpipe_poll(struct netpipe *file, void *ph, unsigned int *reventsp);
 
 int netpipe_close(struct netpipe *file, int mode, void (*free_pollhandle)(void *));
 
 int netpipe_close_update(struct netpipe *file, int mode, void (*poll_notify)(void *), void (*free_pollhandle)(void *));
+
+int netpipe_force_exit(struct netpipe *file);
+
+//int netpipe_force_close(struct netpipe *file, void (*poll_notify)(void *), void (*free_pollhandle)(void *));
 
 #endif //NETPIPEFS_FILE_H

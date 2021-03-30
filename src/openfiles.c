@@ -21,6 +21,29 @@ int netpipefs_open_files_table_init(void) {
     return 0;
 }
 
+int netpipefs_exit_all(void) {
+    int i, err;
+    struct icl_entry_s *entry; // hash table entry
+    char *path; // entry's key
+    struct netpipe *file; // entry's value
+
+    PTH(err, pthread_mutex_lock(&open_files_mtx), return -1)
+
+    if (open_files_table != NULL) {
+        icl_hash_foreach(open_files_table, i, entry, path, file) {
+            err = netpipe_force_exit(file);
+            if (err == -1) {
+                pthread_mutex_unlock(&open_files_mtx);
+                return -1;
+            }
+        }
+    }
+
+    PTH(err, pthread_mutex_unlock(&open_files_mtx), return -1)
+
+    return 0;
+}
+
 int netpipefs_open_files_table_destroy(void) {
     if (open_files_table == NULL) return 0;
 

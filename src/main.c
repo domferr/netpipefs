@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <poll.h>
 #include "../include/signal_handler.h"
 #include "../include/utils.h"
 #include "../include/dispatcher.h"
@@ -16,7 +15,6 @@
 /* Socket communication */
 struct netpipefs_socket netpipefs_socket;
 
-struct fuse_pollhandle *ph_ex = NULL;
 /**
  * Initialize filesystem
  *
@@ -250,7 +248,7 @@ static int poll_callback(const char *path, struct fuse_file_info *fi, struct fus
     struct netpipe *file = (struct netpipe *) fi->fh;
     if (ph == NULL) return 0;
 
-    int err = netpipefs_file_poll(file, ph, reventsp);
+    int err = netpipe_poll(file, ph, reventsp);
     if (err == -1) return -errno;
 
     return 0;
@@ -375,7 +373,7 @@ int main(int argc, char** argv) {
 
     /* Handle signals */
     sigset_t set;
-    if (netpipefs_set_signal_handlers(&set, ch) == -1) {
+    if (netpipefs_set_signal_handlers(&set, ch, fuse) == -1) {
         perror("failed to run signal handler thread");
         fuse_unmount(netpipefs_options.mountpoint, ch);
         goto destroy;
