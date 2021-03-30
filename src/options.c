@@ -42,7 +42,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     netpipefs_options.hostport = DEFAULT_PORT;
     netpipefs_options.pipecapacity = DEFAULT_PIPE_CAPACITY;
     netpipefs_options.delayconnect = 0;
-    netpipefs_options.intr = 1;
+    //netpipefs_options.intr = 1;
 
     /* Parse options */
     MINUS1(fuse_opt_parse(args, &netpipefs_options, netpipefs_opts, NULL), return -1)
@@ -89,11 +89,11 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         netpipefs_options.foreground = 1;
     }
 
-    if (netpipefs_options.intr) {
+    /*if (netpipefs_options.intr) {
         MINUS1ERR(fuse_opt_add_arg(args, "-ointr"), return -1)
         netpipefs_options.intr_signal = SIGUSR1;
         MINUS1ERR(fuse_opt_add_arg(args, "-ointr_signal=10"), return -1)
-    }
+    }*/
     return 0;
 }
 
