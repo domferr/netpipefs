@@ -53,8 +53,8 @@ int netpipefs_set_signal_handlers(sigset_t *set, struct fuse_chan *ch, struct fu
     MINUS1(sigaddset(set, SIGINT), return -1)
     MINUS1(sigaddset(set, SIGTERM), return -1)
     MINUS1(sigaddset(set, SIGPIPE), return -1)
-    if (netpipefs_options.intr)
-        MINUS1(sigaddset(set, netpipefs_options.intr_signal), return -1)
+    /*if (netpipefs_options.intr)
+        MINUS1(sigaddset(set, netpipefs_options.intr_signal), return -1)*/
 
     /* Block SIGINT, SIGTERM and SIGPIPE for main thread */
     PTH(err, pthread_sigmask(SIG_BLOCK, set, NULL), return -1)
