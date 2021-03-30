@@ -44,10 +44,24 @@ int netpipefs_exit_all(void) {
     return 0;
 }
 
+void netpipefs_poll_destroy(void *ph) {
+    fuse_pollhandle_destroy((struct fuse_pollhandle *) ph);
+}
+
+void netpipefs_poll_notify(void *ph) {
+    fuse_notify_poll((struct fuse_pollhandle *) ph);
+    netpipefs_poll_destroy(ph);
+}
+
+static void openfiles_free_netpipe(void *np) {
+    struct netpipe *file = (struct netpipe *) np;
+    netpipe_free(file, &netpipefs_poll_destroy);
+}
+
 int netpipefs_open_files_table_destroy(void) {
     if (open_files_table == NULL) return 0;
 
-    if (icl_hash_destroy(open_files_table, NULL, (void (*)(void *)) &netpipe_free) == -1)
+    if (icl_hash_destroy(open_files_table, NULL, &openfiles_free_netpipe) == -1)
         return -1;
     open_files_table = NULL;
     return 0;

@@ -44,6 +44,10 @@ int netpipefs_remove_open_file(const char *path);
  */
 struct netpipe *netpipefs_get_or_create_open_file(const char *path, int *just_created);
 
+void netpipefs_poll_destroy(void *ph);
+
+void netpipefs_poll_notify(void *ph);
+
 int netpipefs_exit_all(void);
 
 #endif //OPENFILES_H

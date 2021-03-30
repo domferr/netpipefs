@@ -22,15 +22,6 @@ static struct dispatcher dispatcher = {0, {-1,-1} };
 
 extern struct netpipefs_socket netpipefs_socket;
 
-static void netpipefs_poll_destroy(void *ph) {
-    fuse_pollhandle_destroy((struct fuse_pollhandle *) ph);
-}
-
-static void netpipefs_poll_notify(void *ph) {
-    fuse_notify_poll((struct fuse_pollhandle *) ph);
-    netpipefs_poll_destroy(ph);
-}
-
 static int on_open(char *path) {
     int bytes, mode;
 
