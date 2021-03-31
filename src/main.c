@@ -172,7 +172,6 @@ static int open_callback(const char *path, struct fuse_file_info *fi) {
     return 0;
 }
 
-
 /**
  * Create and open a file
  *
