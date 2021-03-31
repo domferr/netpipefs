@@ -17,14 +17,14 @@
             then;               \
         }
 
-#define NOTZERO(w, then)        \
-        if ((w) != 0) {         \
-            then;               \
-        }
-
 #define MINUS1ERR(w, then)      \
         if ((w) == -1) {        \
             perror(#w);         \
+            then;               \
+        }
+
+#define NOTZERO(w, then)        \
+        if ((w) != 0) {         \
             then;               \
         }
 
@@ -73,7 +73,7 @@
  * @param milliseconds how many milliseconds to wait
  * @return 0 on success, -1 otherwise
  */
-int msleep(int milliseconds);
+int msleep(long milliseconds);
 
 /**
  * Parses the given ip address ipstr which is represented in dot notation and as a string and converts it into an

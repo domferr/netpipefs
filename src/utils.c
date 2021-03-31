@@ -6,7 +6,9 @@
 
 #define LONG1E9 1000000000L //1e9
 
-int msleep(int milliseconds) {
+int msleep(long milliseconds) {
+    if (milliseconds <= 0) return 0;
+
     struct timespec req = {MS_TO_SEC(milliseconds), MS_TO_NANOSEC(milliseconds)};
     struct timespec rem = {0, 0};
     int res;
