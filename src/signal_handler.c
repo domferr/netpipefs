@@ -25,7 +25,7 @@ static void *signal_handler_thread(void *arg) {
     PTHERR(err, sigwait(set, &sig), return NULL)
 
     /* Stop all the operations on file */
-    err = netpipefs_exit_all();
+    err = netpipefs_shutdown();
     if (err == -1) perror("signal handler failed to exit all");
 
     /* Exit from loop */

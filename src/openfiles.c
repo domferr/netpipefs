@@ -21,7 +21,7 @@ int netpipefs_open_files_table_init(void) {
     return 0;
 }
 
-int netpipefs_exit_all(void) {
+int netpipefs_shutdown(void) {
     int i, err;
     struct icl_entry_s *entry; // hash table entry
     char *path; // entry's key

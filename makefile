@@ -1,4 +1,4 @@
-CC		= gcc -std=c99
+CC		= gcc -std=c99 -O3
 CFLAGS	= -g -Wall -pedantic -D_POSIX_C_SOURCE=200809L -Wextra 		\
 		-Wwrite-strings -Wstrict-prototypes -Wold-style-definition 	\
 		-Wformat=2 -Wno-unused-parameter -Wshadow 					\

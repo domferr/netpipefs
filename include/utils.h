@@ -1,3 +1,7 @@
+/** @file
+ * Macros for common and repetitive operations and some other functions that are commonly needed.
+ */
+
 #ifndef UTILS_H
 #define UTILS_H
 

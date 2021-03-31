@@ -1,4 +1,4 @@
-/**
+/** @file
  * Definitions for fuse version, command line options, usage text.
  */
 

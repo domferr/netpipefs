@@ -260,11 +260,11 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
 
             /* send data via socket */
             datasent = send_write_message(&netpipefs_socket, file->path, bufptr, tobesent);
+            if (datasent == 0) break;
             if (datasent == -1) {
                 netpipe_unlock(file);
                 return -1;
             }
-            if (datasent == 0) break;
 
             remaining -= datasent;
             bufptr += datasent;
@@ -389,9 +389,10 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
 
             /* Send READ message */
             bytes_wrote = send_read_message(&netpipefs_socket, file->path, datagot);
-            if (bytes_wrote <= 0) {
+            if (bytes_wrote == 0) break;
+            if (bytes_wrote == -1) {
                 netpipe_unlock(file);
-                return -1; // TODO check if something was written before
+                return -1;
             }
 
             DEBUGFILE(file);

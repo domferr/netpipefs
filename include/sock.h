@@ -1,3 +1,8 @@
+/** @file
+ * Utility functions used in netpipefs to establish a double connection and to communicate via sockets by sending
+ * data length before the data itself.
+ */
+
 #ifndef SOCKETCONN_H
 #define SOCKETCONN_H
 

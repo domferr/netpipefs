@@ -44,10 +44,23 @@ int netpipefs_remove_open_file(const char *path);
  */
 struct netpipe *netpipefs_get_or_create_open_file(const char *path, int *just_created);
 
+/**
+ * Destroy given poll handle
+ * @param ph poll handle to be destroyed
+ */
 void netpipefs_poll_destroy(void *ph);
 
+/**
+ * Notify who is interested to the given poll handle which will be destroyed after notification.
+ * @param ph poll handle
+ */
 void netpipefs_poll_notify(void *ph);
 
-int netpipefs_exit_all(void);
+/**
+ * Forces all the operations on any netpipe to immediately end.
+ *
+ * @return 0 on success, -1 on error
+ */
+int netpipefs_shutdown(void);
 
 #endif //OPENFILES_H

@@ -43,18 +43,27 @@ static int on_close(char *path) {
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    MINUS1(netpipe_close_update(file, mode, &netpipefs_poll_notify, &netpipefs_poll_destroy), return -1)
+    MINUS1(netpipe_close_update(file, mode), return -1)
 
     return bytes; // > 0
 }
 
 static int on_write(char *path) {
     int bytes;
+    size_t size;
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    bytes = netpipe_recv(file, &netpipefs_poll_notify);
 
+    /* Read how much data can be read from socket */
+    bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
+    if (bytes <= 0) return bytes;
+    if (size <= 0) {
+        EINVAL;
+        return -1;
+    }
+
+    bytes = netpipe_recv(file, size);
     if (bytes <= 0) {
         DEBUG("remote: WRITE %s\n", path);
         if (errno == EPIPE) {
@@ -74,18 +83,22 @@ static int on_read(char *path) {
     size_t size;
     bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
     if (bytes <= 0) return bytes;
+    if (size <= 0) {
+        EINVAL;
+        return -1;
+    }
 
     DEBUG("remote: READ %s %ld bytes\n", path, size);
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    err = netpipe_read_update(file, size, &netpipefs_poll_notify);
+    err = netpipe_read_update(file, size);
     if (err == -1) return -1;
 
     return bytes;
 }
 
-static void *netpipefs_dispatcher_fun(void *args) {
+static void *netpipefs_dispatcher_fun(void *unused) {
     int bytes = 1, err, run = 1, nfds;
 
     fd_set set, rd_set;
@@ -158,7 +171,7 @@ int netpipefs_dispatcher_stop(void) {
     dispatcher.pipefd[1] = -1;
 
     PTH(err, pthread_join(dispatcher.tid, NULL), return -1)
-    DEBUG("dispatcher stopped running\n");
+    DEBUG("dispatcher stopped\n");
 
     /* Close the read end of the pipe */
     close(dispatcher.pipefd[0]);

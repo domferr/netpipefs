@@ -1,3 +1,9 @@
+/** @file
+ * Functions readn and writen.
+ * From “Advanced Programming In the UNIX Environment” by W. Richard Stevens
+ * and Stephen A. Rago, 2013, 3rd Edition, Addison-Wesley.
+ */
+
 #ifndef SCFILES_H
 #define SCFILES_H
 
@@ -5,8 +11,7 @@
 
 /**
  * Read "n" bytes from the given file descriptor.
- * (from “Advanced Programming In the UNIX Environment” by W. Richard Stevens
- * and Stephen A. Rago, 2013, 3rd Edition, Addison-Wesley)
+ *
  * @param fd file descriptor
  * @param ptr buffer pointer
  * @param n how many bytes to read
@@ -16,8 +21,7 @@ ssize_t readn(int fd, void *ptr, size_t n);
 
 /**
  * Write "n" bytes into the given file descriptor.
- * (from “Advanced Programming In the UNIX Environment” by W. Richard Stevens
- * and Stephen A. Rago, 2013, 3rd Edition, Addison-Wesley)
+ *
  * @param fd file descriptor
  * @param ptr buffer pointer
  * @param n how many bytes to write

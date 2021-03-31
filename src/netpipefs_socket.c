@@ -13,7 +13,7 @@
 #include "../include/utils.h"
 
 #define UNIX_PATH_MAX 108
-#define BASESOCKNAME "./sockfile"
+#define BASESOCKNAME "/tmp/sockfile"
 
 static int afinet_address(struct sockaddr_in *sin, int port, const char *ip) {
     memset(sin, 0, sizeof(*sin));

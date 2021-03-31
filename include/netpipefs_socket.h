@@ -15,7 +15,7 @@ struct netpipefs_socket {
     size_t remotepipecapacity;
 };
 
-/* header sent before each message */
+/** Header sent before each message */
 enum netpipefs_header {
     OPEN = 100,
     CLOSE,
