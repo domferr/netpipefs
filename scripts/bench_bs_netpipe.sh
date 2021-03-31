@@ -2,18 +2,12 @@
 # Runs a benchmark which increases block size until 4gb. Count will always be 1
 #
 
-# benchmark file where to print write results
-BENCH_WRITE_FILE=bench-write.txt
-# benchmark file where to print read results
-BENCH_READ_FILE=bench-read.txt
-# write blocksize
-OBS=1024
-# how many times should write
-COUNT=1
-# read blocksize
-IBS=$OBS
-# number of iterations
-ITER=23 # until 4gb
+BENCH_WRITE_FILE=bench-write.txt  # benchmark file where to print write results
+BENCH_READ_FILE=bench-read.txt    # benchmark file where to print read results
+OBS=1024  # write blocksize
+COUNT=1   # how many times should write
+IBS=$OBS  # read blocksize
+ITER=23   # number of iterations (23: until 4gb)
 
 # empty out both files
 > $BENCH_WRITE_FILE

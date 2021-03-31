@@ -1,5 +1,5 @@
 #
-# Runs a benchmark which increases blocksize untile the pipe capacity and then increases count until data wrote is 4gb.
+# Runs a benchmark which increases block size until 4gb. Count will always be 1
 #
 
 # benchmark file where to print write results
@@ -16,6 +16,14 @@ IBS=$OBS
 ITER=23 # until 4gb
 PIPECAPACITY=4096
 
+namedpipe=/tmp/bench
+
+trap "rm -f $namedpipe" EXIT
+
+if [[ ! -p $namedpipe ]]; then
+    mkfifo $namedpipe
+fi
+
 # empty out both files
 > $BENCH_WRITE_FILE
 > $BENCH_READ_FILE
@@ -25,12 +33,12 @@ while [ $i -lt $ITER ]
 do
   printf "\rRunning benchmark: bs=%d count=%d %d%c" $OBS $COUNT $((($i*100)/$ITER)) '%'
 
-  dd if=/dev/zero of=./tmp/prod/bench bs=$OBS count=$COUNT 2>&1 | grep copied >> $BENCH_WRITE_FILE &
-  dd if=./tmp/cons/bench bs=$IBS 2>&1 | grep -a copied >> $BENCH_READ_FILE
+  dd if=/dev/zero of=$namedpipe bs=$OBS count=$COUNT 2>&1 | grep copied >> $BENCH_WRITE_FILE &
+  dd if=$namedpipe bs=$IBS 2>&1 | grep -a copied >> $BENCH_READ_FILE
   wait
 
   i=$(( $i + 1 ))
-  if [ $obs -eq $PIPECAPACITY ]; then
+  if [ $OBS -eq $PIPECAPACITY ]; then
       COUNT=$(($COUNT * 2))
   else
       OBS=$(( $OBS * 2 )) # increase block size
