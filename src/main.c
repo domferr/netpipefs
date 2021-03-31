@@ -270,7 +270,7 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
     struct netpipe *file = (struct netpipe *) fi->fh;
 
-    int ret = netpipe_close(file, mode, (void (*)(void *)) &fuse_pollhandle_destroy);
+    int ret = netpipe_close(file, mode);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
