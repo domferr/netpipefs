@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include "../include/options.h"
 #include "../include/netpipefs_socket.h"
+#include "../include/netpipe.h"
 #include "../include/scfiles.h"
 #include "../include/sock.h"
 #include "../include/utils.h"
@@ -217,6 +218,24 @@ int send_close_message(struct netpipefs_socket *skt, const char *path, int mode)
 
     PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
     if (bytes > 0) DEBUG("sent: CLOSE %s %d\n", path, mode);
+
+    return bytes;
+}
+
+int send_flush_message(struct netpipefs_socket *skt, struct netpipe *file, size_t size) {
+    int err, bytes;
+
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
+
+    bytes = send_socket_header(skt->fd, WRITE, file->path);
+    if (bytes > 0)
+        bytes = writen(skt->fd, &size, sizeof(size_t)); // TODO Check size
+    if (bytes > 0) {
+        bytes = cbuf_writen(skt->fd, file->buffer, size);
+    }
+
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
+    if (bytes > 0) DEBUG("sent: WRITE %s %ld <DATA>\n", file->path, size);
 
     return bytes;
 }

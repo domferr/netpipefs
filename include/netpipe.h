@@ -82,6 +82,8 @@ struct netpipe *netpipe_open(const char *path, int mode, int nonblock);
  */
 struct netpipe *netpipe_open_update(const char *path, int mode);
 
+ssize_t netpipe_flush(struct netpipe *file);
+
 /**
  * Send "size" bytes to the remote host. This function will block (if nonblock is 0) when the remote netpipe
  * is full, otherwise if nonblock is 1 then it doesn't block and returns data that was sent without

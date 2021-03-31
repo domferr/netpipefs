@@ -2,6 +2,7 @@
 #define NETPIPEFS_SOCKET_H
 
 #include <pthread.h>
+#include "netpipe.h"
 
 #define AF_UNIX_LABEL "AF_UNIX"
 #define AF_INET_LABEL "AF_INET"
@@ -85,6 +86,8 @@ int send_close_message(struct netpipefs_socket *skt, const char *path, int mode)
  * @return > 0 on success, 0 if the socket was closed, -1 on error
  */
 int send_write_message(struct netpipefs_socket *skt, const char *path, const char *buf, size_t size);
+
+int send_flush_message(struct netpipefs_socket *skt, struct netpipe *file, size_t size);
 
 /**
  * Send READ message

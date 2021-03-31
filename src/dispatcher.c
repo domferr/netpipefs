@@ -9,7 +9,6 @@
 #include "../include/dispatcher.h"
 #include "../include/utils.h"
 #include "../include/scfiles.h"
-#include "../include/netpipe.h"
 #include "../include/openfiles.h"
 #include "../include/netpipefs_socket.h"
 
@@ -53,13 +52,19 @@ static int on_write(char *path) {
     size_t size;
 
     struct netpipe *file = netpipefs_get_open_file(path);
-    if (file == NULL) return -1;
+    if (file == NULL) {
+        errno = ENOENT;
+        return -1;
+    }
 
     /* Read how much data can be read from socket */
     bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
-    if (bytes <= 0) return bytes;
+    if (bytes <= 0) {
+        DEBUG("bytes <= 0\n");
+        return bytes;
+    }
     if (size <= 0) {
-        EINVAL;
+        errno = EINVAL;
         return -1;
     }
 
@@ -113,7 +118,7 @@ static void *netpipefs_dispatcher_fun(void *unused) {
         if (err == -1) { // an error occurred then stop running
             perror("dispatcher. select() failed");
             run = 0;
-        } else if (FD_ISSET(dispatcher.pipefd[0], &rd_set)) {  // pipe can be read then stop running
+        } else if (FD_ISSET(dispatcher.pipefd[0], &rd_set)) {  // pipe can be read then stop running;
             run = 0;
         } else {    // can read from socket
             enum netpipefs_header header;

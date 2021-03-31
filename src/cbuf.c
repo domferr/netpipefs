@@ -64,6 +64,33 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
     return got;
 }
 
+ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n) {
+    char *dataptr;
+    size_t   nleft;
+    ssize_t  nwritten;
+    size_t linear_len;
+
+    nleft = n;
+    while (nleft > 0 && !cbuf_empty(cbuf)) {
+        if (cbuf->head > cbuf->tail) linear_len = cbuf->head - cbuf->tail;
+        else linear_len = cbuf->capacity - cbuf->tail;
+        if (linear_len > nleft) linear_len = nleft;
+
+        dataptr = cbuf->data + cbuf->tail;
+        if((nwritten = write(fd, dataptr, linear_len)) < 0) {
+            if (nleft == n) return -1; /* error, return -1 */
+            else break; /* error, return amount written so far */
+        } else if (nwritten == 0) break;
+
+        nleft -= nwritten;
+        cbuf->tail += nwritten;
+        if (cbuf->tail >= cbuf->capacity) cbuf->tail = 0;
+        cbuf->isfull = 0;
+    }
+
+    return(n - nleft); /* return >= 0 */
+}
+
 ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n) {
     char *dataptr;
 

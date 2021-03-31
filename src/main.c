@@ -275,7 +275,10 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     return 0; //ignored
 }
 
-/** Change the size of a file */
+/**
+ * Change the size of a file. It does nothing but it's needed to
+ * support write callback.
+ * */
 static int truncate_callback(const char *path, off_t newsize) {
     return 0;
 }

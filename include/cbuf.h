@@ -37,7 +37,7 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size);
  *
  * @param cbuf the buffer
  * @param data data got will be added into this pointer
- * @param size how much the data should get
+ * @param size how much data should get
  * @return how much data was got
  */
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size);
@@ -51,6 +51,8 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size);
  * @return number of bytes read or -1 on error or 0 on end of file
  */
 ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n);
+
+ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n);
 
 /**
  * Check if the given buffer is full or not.

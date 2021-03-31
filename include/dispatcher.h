@@ -1,6 +1,8 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
+#include "./netpipe.h"
+
 /**
  * Run dispatcher thread
  * @return 0 on success, -1 on error
