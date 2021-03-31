@@ -16,7 +16,7 @@ static struct fuse *fuse;
 static pthread_t sig_handler_tid;
 static int pipefd[2] = { -1, -1 };  // used to communicate with main thread
 
-/** Function executed by the signal handler. The argument is the set of signal that should be caught */
+/** Function executed by the signal handler. The argument is the set of signals that should be caught */
 static void *signal_handler_thread(void *arg) {
     sigset_t *set = arg;
     int err, sig, unused;

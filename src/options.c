@@ -13,7 +13,7 @@ struct netpipefs_options netpipefs_options;
 #define NETPIPEFS_OPT(t, p, v) { t, offsetof(struct netpipefs_options, p), v }
 
 /**
- * netpipefs's option descriptor array
+ * NetpipeFS's option descriptor array
  */
 static const struct fuse_opt netpipefs_opts[] = {
         NETPIPEFS_OPT("-h",                 show_help, 1),

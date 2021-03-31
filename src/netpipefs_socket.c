@@ -42,7 +42,7 @@ static int afinet_address(struct sockaddr_in *sin, int port, const char *ip) {
  * like [BASESOCKNAME][port].sock.
  *
  * @param sin structure that will be set
- * @param port the port 
+ * @param port the port
  * @return 0 on success, -1 on error
  */
 static void afunix_address(struct sockaddr_un *sun, int port) {
