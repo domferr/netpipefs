@@ -14,6 +14,7 @@
 
 extern struct netpipefs_socket netpipefs_socket;
 
+/** Linked list of poll handles */
 struct poll_handle {
     void *ph;
     struct poll_handle *next;

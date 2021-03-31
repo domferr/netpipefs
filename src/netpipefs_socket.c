@@ -15,6 +15,14 @@
 #define UNIX_PATH_MAX 108
 #define BASESOCKNAME "/tmp/sockfile"
 
+/**
+ * Set up a AF_INET address with the given ip and port
+ *
+ * @param sin structure that will be set
+ * @param port the port
+ * @param ip the ip. If NULL then INADDR_ANY will be used
+ * @return 0 on success, -1 on error
+ */
 static int afinet_address(struct sockaddr_in *sin, int port, const char *ip) {
     memset(sin, 0, sizeof(*sin));
 
@@ -29,6 +37,14 @@ static int afinet_address(struct sockaddr_in *sin, int port, const char *ip) {
     return 0;
 }
 
+/**
+ * Set up a AF_UNIX address. The socket file will have a name
+ * like [BASESOCKNAME][port].sock.
+ *
+ * @param sin structure that will be set
+ * @param port the port 
+ * @return 0 on success, -1 on error
+ */
 static void afunix_address(struct sockaddr_un *sun, int port) {
     char sockname[UNIX_PATH_MAX];
 
@@ -149,6 +165,14 @@ int end_socket_connection(struct netpipefs_socket *netpipefs_socket) {
     return close(netpipefs_socket->fd);
 }
 
+/**
+ * Write to the socket the message header
+ *
+ * @param fd_skt socket file descriptor
+ * @param message message header
+ * @param path path relative to the message
+ * @return 0 if the connection is lost, more than zero on success, -1 on error
+ */
 static int send_socket_header(int fd_skt, enum netpipefs_header message, const char *path) {
     int bytes = writen(fd_skt, &message, sizeof(enum netpipefs_header));
     if (bytes <= 0) return bytes;
