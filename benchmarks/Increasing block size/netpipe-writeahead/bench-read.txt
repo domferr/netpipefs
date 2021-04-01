@@ -18,6 +18,6 @@
 133971968 bytes (134 MB, 128 MiB) copied, 4.77771 s, 28.0 MB/s
 268124160 bytes (268 MB, 256 MiB) copied, 9.19592 s, 29.2 MB/s
 536387584 bytes (536 MB, 512 MiB) copied, 18.3328 s, 29.3 MB/s
-1073115136 bytes (1.1 GB, 1023 MiB) copied, 36.5255 s, 29.4 MB/s
+1073115136 bytes (1.1 GB, 1.0 GiB) copied, 36.5255 s, 29.4 MB/s
 2146238464 bytes (2.1 GB, 2.0 GiB) copied, 72.7376 s, 29.5 MB/s
 2145382400 bytes (2.1 GB, 2.0 GiB) copied, 73.5729 s, 29.2 MB/s

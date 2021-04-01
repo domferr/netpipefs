@@ -82,8 +82,6 @@ struct netpipe *netpipe_open(const char *path, int mode, int nonblock);
  */
 struct netpipe *netpipe_open_update(const char *path, int mode);
 
-ssize_t netpipe_flush(struct netpipe *file);
-
 /**
  * Send "size" bytes to the remote host. This function will block (if nonblock is 0) when the remote netpipe
  * is full, otherwise if nonblock is 1 then it doesn't block and returns data that was sent without
@@ -133,13 +131,26 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
 int netpipe_read_update(struct netpipe *file, size_t size);
 
 /**
- * Poll
- * @param file
- * @param ph
- * @param reventsp
+ * Do polling by setting the available events and registering a poll handle.
+ *
+ * @param file the file to be polled
+ * @param ph pointer to pollhandle
+ * @param reventsp will be set with the available events
  * @return
  */
 int netpipe_poll(struct netpipe *file, void *ph, unsigned int *reventsp);
+
+/**
+ * Flush data. When nonblock is 1 then it will flush only the bytes that can be flushed
+ * without blocking. If nonblock is 0 then it will block until all the bytes in the
+ * local buffer can be flushed. If nonblock is 1 but the netpipe is empty then it
+ * return -1 and errno is set to EAGAIN.
+ *
+ * @param file the file to be flushed
+ * @param nonblock if 1 then this function will not block
+ * @return how many bytes were flushed or 0 if connection was lost or -1 on error
+ */
+ssize_t netpipe_flush(struct netpipe *file, int nonblock);
 
 /**
  * Closes the netpipe.

@@ -27,6 +27,7 @@ static const struct fuse_opt netpipefs_opts[] = {
         NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
         NETPIPEFS_OPT("--pipecapacity=%i",  pipecapacity, 0),
         NETPIPEFS_OPT("-delayconnect",      delayconnect, 1),
+        NETPIPEFS_OPT("-nowriteahead",      writeahead, 0),
 
         FUSE_OPT_END
 };
@@ -42,6 +43,7 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
     netpipefs_options.hostport = DEFAULT_PORT;
     netpipefs_options.pipecapacity = DEFAULT_PIPE_CAPACITY;
     netpipefs_options.delayconnect = 0;
+    netpipefs_options.writeahead = 1;
     //netpipefs_options.intr = 1;
 
     /* Parse options */
@@ -116,12 +118,13 @@ void netpipefs_usage(const char *progname) {
     printf("usage: %s [options] <mountpoint>\n"
            "\n", progname);
     printf("netpipefs options:\n"
-           "    -p <d>, --port=<d>     local port used for the socket connection (default: %d)\n"
-           "    --hostip=<s>           remote host ipv4 address to which connect to. if localhost then AF_UNIX sockets are used\n"
-           "    --hostport=<d>         remote port used for the socket connection (default: %d)\n"
-           "    --timeout=<d>          connection timeout expressed in milliseconds (default: %d ms)\n"
-           "    --pipecapacity=<d>     max network pipe capacity (default: %d)\n"
-           "    -delayconnect          connect to host after the filesystem is mounted\n"
+           "    -p <d>, --port=<d>      local port used for the socket connection (default: %d)\n"
+           "    --hostip=<s>            remote host ipv4 address to which connect to. if localhost then AF_UNIX sockets are used\n"
+           "    --hostport=<d>          remote port used for the socket connection (default: %d)\n"
+           "    --timeout=<d>           connection timeout expressed in milliseconds (default: %d ms)\n"
+           "    --pipecapacity=<d>      max network pipe capacity (default: %d)\n"
+           "    -delayconnect           connect to host after the filesystem is mounted\n"
+           "    -nowriteahead           don't bufferize write requests but directly send data when possible \n"
            "\n", DEFAULT_PORT, DEFAULT_PORT, DEFAULT_TIMEOUT, DEFAULT_PIPE_CAPACITY);
     fuse_usage();
 }

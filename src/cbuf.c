@@ -13,24 +13,22 @@ struct cbuf_s {
 };
 
 cbuf_t *cbuf_alloc(size_t capacity) {
-    if (capacity <= 0) {
-        errno = EINVAL;
-        return NULL;
-    }
-
     struct cbuf_s *cbuf = (struct cbuf_s*) malloc(sizeof(struct cbuf_s));
     if (cbuf == NULL) return NULL;
 
     cbuf->capacity = capacity;
-    cbuf->data = (char*) malloc(sizeof(char) * capacity);
-    if (cbuf->data == NULL) {
-        free(cbuf);
-        return NULL;
-    }
-
     cbuf->head = 0;
     cbuf->tail = 0;
-    cbuf->isfull = 0;
+    cbuf->isfull = capacity == 0;
+    if (capacity == 0) {
+        cbuf->data = NULL;
+    } else {
+        cbuf->data = (char *) malloc(sizeof(char) * capacity);
+        if (cbuf->data == NULL) {
+            free(cbuf);
+            return NULL;
+        }
+    }
 
     return cbuf;
 }
@@ -42,6 +40,7 @@ void cbuf_free(cbuf_t *cbuf) {
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
     size_t put = 0;
+
     while(put < size && !cbuf->isfull) {
         cbuf->data[cbuf->head] = *(data+put);
         (cbuf->head)++;
@@ -54,6 +53,8 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
 
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
     size_t got = 0;
+    if (cbuf->capacity == 0) return 0;
+
     while(got < size && !cbuf_empty(cbuf)) {
         *(data+got) = cbuf->data[cbuf->tail];
         (cbuf->tail)++;
@@ -69,6 +70,7 @@ ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n) {
     size_t   nleft;
     ssize_t  nwritten;
     size_t linear_len;
+    if (cbuf->capacity == 0) return 0;
 
     nleft = n;
     while (nleft > 0 && !cbuf_empty(cbuf)) {

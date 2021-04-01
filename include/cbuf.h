@@ -7,7 +7,7 @@
 typedef struct cbuf_s cbuf_t;
 
 /**
- * Creates a new buffer with a given capacity
+ * Creates a new buffer with a given capacity.
  *
  * @param capacity how much data the buffer can have
  * @return the created buffer, NULL on error
@@ -22,7 +22,7 @@ cbuf_t *cbuf_alloc(size_t capacity);
 void cbuf_free(cbuf_t *cbuf);
 
 /**
- * Put data into the buffer. Only puts data until the buffer is full
+ * Put data into the buffer. Only puts data until the buffer is full.
  *
  * @param cbuf the buffer
  * @param data the data
@@ -71,7 +71,7 @@ int cbuf_full(cbuf_t *cbuf);
 int cbuf_empty(cbuf_t *cbuf);
 
 /**
- * Get how much data is inside the buffer
+ * Get how much data is inside the buffer.
  *
  * @param cbuf the buffer
  * @return how much data there is into the buffer
@@ -79,7 +79,7 @@ int cbuf_empty(cbuf_t *cbuf);
 size_t cbuf_size(cbuf_t *cbuf);
 
 /**
- * Get the buffer capacity
+ * Get the buffer capacity.
  *
  * @param cbuf the buffer
  * @return the buffer's capacity
