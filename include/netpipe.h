@@ -25,6 +25,8 @@ struct netpipe {
     pthread_cond_t rd;  // wait if the buffer is empty
     pthread_cond_t wr;  // wait if the buffer is full
     pthread_mutex_t mtx; // netpipe lock
+    struct netpipe_req *wr_req;
+    struct netpipe_req *rd_req;
 };
 
 /**
