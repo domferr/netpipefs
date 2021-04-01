@@ -10,6 +10,7 @@
 #include "../include/netpipefs_socket.h"
 
 #define NOT_OPEN -1
+#define available_remote(file) (file->remotecapacity - file->remotesize)
 
 extern struct netpipefs_socket netpipefs_socket;
 
@@ -269,32 +270,54 @@ struct netpipe *netpipe_open_update(const char *path, int mode) {
 }
 
 /**
- * Flush data. Be sure to call this function only if there is data available locally and
- * remote host has not a full buffer.
+ * Send data.
  *
- * @param file the file to be flushed
- * @return how many bytes were flushed or 0 if connection was lost or -1 on error
+ * @param file the file
+ * @param datasent will be set with how many bytes were sent
+ * @return 1 on success and it sets datasent, 0 if connection was lost, -1 on error
  */
-static ssize_t do_flush(struct netpipe *file) {
-    ssize_t datasent;
-    size_t available_remote = file->remotecapacity - file->remotesize;
-    size_t available_locally = cbuf_size(file->buffer);
-    size_t tobesent = available_locally < available_remote ? available_locally:available_remote;
+static int do_send(struct netpipe *file, char *bufptr, size_t size, size_t *datasent) {
+    int bytes;
 
-    if (tobesent == 0) {
-        errno = EINVAL;
-        return 0;
-    }
+    *datasent = size < available_remote(file) ? size : available_remote(file);
+    if (*datasent == 0) return 1;
 
-    datasent = send_flush_message(&netpipefs_socket, file, tobesent);
-    if (datasent > 0) file->remotesize += datasent;
+    bytes = send_write_message(&netpipefs_socket, file->path, bufptr, *datasent);
+    if (bytes <= 0) return bytes;
 
-    return datasent;
+    *datasent = bytes;
+    file->remotesize += *datasent;
+    return 1;
 }
 
+/**
+ * Flush data.
+ *
+ * @param file the file to be flushed
+ * @param datasent will be set with how many bytes were sent
+ * @return 1 on success and it sets datasent, 0 if connection was lost, -1 on error
+ */
+static int do_flush(struct netpipe *file, size_t *datasent) {
+    int err;
+    size_t available_locally;
+
+    available_locally = cbuf_size(file->buffer);
+    *datasent = available_locally < available_remote(file) ? available_locally:available_remote(file);
+    if (*datasent == 0) return 1;
+
+    err = send_flush_message(&netpipefs_socket, file, *datasent);
+    if (err <= 0) return err;
+
+    *datasent = err;
+    file->remotesize += *datasent;
+    return 1;
+}
+
+
 ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
-    int wasfull_locally, err, bytes;
+    int err;
     ssize_t datasent = 0;
+    size_t bytes;
 
     NOTZERO(netpipe_lock(file), return -1)
 
@@ -314,7 +337,6 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
             break;
         }
 
-        wasfull_locally = cbuf_full(file->buffer);
         /* file is full on the remote host but there is local data to be flushed */
         while(!file->force_exit && file->remotecapacity == file->remotesize && !cbuf_empty(file->buffer) && file->readers > 0) {
             PTH(err, pthread_cond_wait(&(file->wr), &(file->mtx)), netpipe_unlock(file); return -1)
@@ -324,12 +346,12 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
 
         /* send data */
         if (file->readers > 0 && !cbuf_empty(file->buffer)) {
-            bytes = do_flush(file);
-            if (bytes <= 0) break;
+            err = do_flush(file, &bytes);
+            if (err <= 0) break;
 
             datasent += bytes;
             /* wake up waiting writers */
-            if (wasfull_locally) PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
+            PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
 
             DEBUGFILE(file);
         }
@@ -340,24 +362,10 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
     return datasent;
 }
 
-static ssize_t do_send(struct netpipe *file, char *bufptr, size_t size) {
-    size_t available_remote, tobesent, datasent;
-
-    available_remote = file->remotecapacity - file->remotesize;
-    tobesent = size < available_remote ? size : available_remote;
-    if (tobesent == 0) return 0;
-
-    datasent = send_write_message(&netpipefs_socket, file->path, bufptr, tobesent);
-    if (datasent > 0) file->remotesize += datasent;
-
-    return datasent;
-}
-
 ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int nonblock) {
     int err;
-    size_t already_sent;
-    ssize_t ret;
     char *bufptr = (char *) buf;
+    size_t sent = 0, bytes, remaining;
 
     NOTZERO(netpipe_lock(file), return -1)
 
@@ -367,36 +375,63 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
         return -1;
     }
 
-    ret = do_send(file, bufptr, size);
-    if (ret == -1 || ret == (ssize_t) size || nonblock) {
-        if (nonblock && ret == 0) errno = EAGAIN;
+    // Flush buffer: send data from buffer
+    err = do_flush(file, &bytes);
+    if (err <= 0) {
         netpipe_unlock(file);
-        return ret;
+        return -1;
+    }
+    if (bytes > 0) PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
+
+    // If host can still receive data and local buffer is empty
+    // Directly send data
+    if (available_remote(file) > 0 && cbuf_empty(file->buffer)) {
+        err = do_send(file, bufptr, size, &bytes);
+        if (err <= 0) {
+            netpipe_unlock(file);
+            return -1;
+        }
+
+        bufptr += bytes;
+        sent += bytes;
     }
 
-    DEBUG("Sent %ld bytes before sleeping\n", ret);
-    bufptr += ret;
-    size -= ret;
-    already_sent = ret;
+    // If all the bytes were sent
+    if (sent == size) {
+        netpipe_unlock(file);
+        return sent;
+    }
 
-    netpipe_req_t *request = netpipe_add_request(file, bufptr, size, O_WRONLY);
-    while(!file->force_exit && request->bytes_processed != size && !request->error) {
+    // If there is space into the buffer and this request need to send data
+    // Put data from this request into the buffer (writeahead). Data put will be 0 if the buffer is full
+    bytes = cbuf_put(file->buffer, bufptr, size);
+    bufptr += bytes;
+    sent += bytes;
+
+    if (sent == size || nonblock) {
+        if (sent == 0) errno = EAGAIN;
+        netpipe_unlock(file);
+        return sent;
+    }
+
+    remaining = size - sent;
+    netpipe_req_t *request = netpipe_add_request(file, bufptr, remaining, O_WRONLY);
+    while(!file->force_exit && request->bytes_processed != remaining && !request->error) {
         PTH(err, pthread_cond_wait(&(file->wr), &(file->mtx)), netpipe_unlock(file); return -1)
     }
 
-    if (request->error) {
-        errno = request->error;
-        ret = -1;
-    } else if (request->bytes_processed == 0 && file->force_exit) {
-        errno = EPIPE;
-        ret = -1;
+    if (request->bytes_processed == 0 && (file->force_exit || request->error)) {
+        if (request->error) errno = request->error;
+        else errno = EPIPE;
+        sent = -1;
     } else {
-        ret = request->bytes_processed + already_sent;
+        sent += request->bytes_processed;
     }
 
     free(request);
     NOTZERO(netpipe_unlock(file), return -1)
-    return ret;
+
+    return sent;
 }
 
 /**
@@ -514,31 +549,86 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
     NOTZERO(netpipe_unlock(file), return -1)
 
     return size - remaining;
+    /*
+     * int err, bytes_wrote, canread;
+
+    ssize_t read;
+    char *bufptr = (char *) buf;
+
+    NOTZERO(netpipe_lock(file), return -1)
+
+    if (file->force_exit) {
+        errno = EPIPE;
+        netpipe_unlock(file);
+        return -1;
+    }
+
+    read = do_read(file, bufptr, size);
+    if (read == -1 || read == (ssize_t) size || nonblock) {
+        if (nonblock && read == 0) errno = EAGAIN;
+        netpipe_unlock(file);
+        return read;
+    }
+
+    bufptr += read;
+    size -= read;
+
+    netpipe_req_t *request = netpipe_add_request(file, bufptr, size, O_RDONLY);
+    while(!file->force_exit && request->bytes_processed != size && !request->error) {
+        PTH(err, pthread_cond_wait(&(file->wr), &(file->mtx)), netpipe_unlock(file); return -1)
+    }
+
+    if (request->error) {
+        errno = request->error;
+        read = -1;
+    } else if (request->bytes_processed == 0 && file->force_exit) {
+        errno = EPIPE;
+        read = -1;
+    } else {
+        read += request->bytes_processed;
+    }
+
+    free(request);
+    NOTZERO(netpipe_unlock(file), return -1)
+
+    return read;
+     */
 }
 
 int netpipe_read_update(struct netpipe *file, size_t size) {
     int err;
     char *bufptr;
     netpipe_req_t *req;
-    size_t available_remote, remaining, datasent;
+    size_t remaining, datasent;
 
     NOTZERO(netpipe_lock(file), return -1)
 
-    /* update remote size and wake up writers */
     file->remotesize -= size;
-    available_remote = file->remotecapacity - file->remotesize;
+
+    // Flush buffer: send data from buffer
+    err = do_flush(file, &datasent);
+    if (err <= 0) {
+        netpipe_unlock(file);
+        return -1;
+    }
+    if (datasent > 0) PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
+
+
+    // If host can still receive data
+    // Handle requests: send data from pending requests
     req = file->wr_req;
-    while (req != NULL && available_remote > 0) {
-        DEBUG("bytes_processed=%ld/%ld\n", req->bytes_processed, req->size);
+    while(available_remote(file) > 0 && req != NULL) {
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
-        datasent = do_send(file, bufptr, remaining);
-        if (datasent <= 0) {
-            if (datasent == 0) errno = ECONNRESET;
-            //TODO what happens if (req->bytes_processed == 0)
-            req->error = errno;
+
+        err = do_send(file, bufptr, remaining, &datasent);
+        if (err <= 0) {
+            if (err == 0) req->error = ECONNRESET;
+            else req->error = errno;
+            PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
+            file->wr_req = req->next;
             netpipe_unlock(file);
-            return datasent;
+            return err;
         }
 
         req->bytes_processed += datasent;
@@ -546,10 +636,25 @@ int netpipe_read_update(struct netpipe *file, size_t size) {
             PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
             req = req->next;
         }
-        available_remote = file->remotecapacity - file->remotesize;
     }
-    DEBUGFILE(file);
     file->wr_req = req;
+
+    // If there are pending requests and there is space into the buffer
+    // Put data from requests into the buffer (Writeahead)
+    while (req != NULL && !cbuf_full(file->buffer)) {
+        bufptr = req->buf + req->bytes_processed;
+        remaining = req->size - req->bytes_processed;
+
+        datasent = cbuf_put(file->buffer, bufptr, remaining);
+        req->bytes_processed += datasent;
+        if (req->bytes_processed == req->size) {
+            PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
+            req = req->next;
+        }
+    }
+    file->wr_req = req;
+
+    DEBUGFILE(file);
     loop_poll_notify(file);
 
     NOTZERO(netpipe_unlock(file), return -1)
@@ -558,7 +663,7 @@ int netpipe_read_update(struct netpipe *file, size_t size) {
 }
 
 int netpipe_close(struct netpipe *file, int mode) {
-    int bytes = 1, err = 0;
+    int bytes, err = 0;
 
     NOTZERO(netpipe_lock(file), return -1)
 
@@ -566,10 +671,10 @@ int netpipe_close(struct netpipe *file, int mode) {
         file->writers--;
         if (file->writers == 0) {
             // there are no writers, then flush all data before closing
-            /*NOTZERO(netpipe_unlock(file), return -1)
+            NOTZERO(netpipe_unlock(file), return -1)
             bytes = netpipe_flush(file, 0);
-            if (bytes != -1) DEBUG("Flushed %d bytes before closing\n", bytes);
-            NOTZERO(netpipe_lock(file), return -1)*/
+            NOTZERO(netpipe_lock(file), return -1)
+            if (bytes <= 0) err = -1;
         }
     } else if (mode == O_RDONLY) {
         file->readers--;
@@ -578,8 +683,7 @@ int netpipe_close(struct netpipe *file, int mode) {
     DEBUGFILE(file);
 
     bytes = send_close_message(&netpipefs_socket, file->path, mode);
-    if (bytes <= 0)
-        err = -1;
+    if (bytes <= 0) err = -1;
 
     if (file->writers == 0 && file->readers == 0) {
         MINUS1(netpipefs_remove_open_file(file->path), err = -1)
@@ -607,14 +711,12 @@ int netpipe_close_update(struct netpipe *file, int mode) {
     } else if (mode == O_RDONLY) {
         file->readers--;
         if (file->readers == 0) {
-            req = file->rd_req;
+            req = file->wr_req;
             while(req != NULL) {
-                if (req->bytes_processed == 0)
-                    req->error = EPIPE;
-
+                if (req->bytes_processed == 0) req->error = EPIPE;
                 req = req->next;
             }
-            file->rd_req = NULL;
+            file->wr_req = NULL;
             PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
         }
     }
