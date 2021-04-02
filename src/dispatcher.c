@@ -42,7 +42,9 @@ static int on_close(char *path) {
 
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
+    DEBUG("before netpipe_close_update\n");
     MINUS1(netpipe_close_update(file, mode), return -1)
+    DEBUG("after netpipe_close_update\n");
 
     return bytes; // > 0
 }
@@ -68,9 +70,10 @@ static int on_write(char *path) {
         return -1;
     }
 
+    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
+
     bytes = netpipe_recv(file, size);
     if (bytes <= 0) {
-        DEBUG("remote: WRITE %s\n", path);
         if (errno == EPIPE) {
             DEBUG("on write broken pipe\n");
             return 1;
@@ -78,14 +81,13 @@ static int on_write(char *path) {
         return -1;
     }
 
-    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
-
     return bytes;
 }
 
 static int on_read(char *path) {
     int err, bytes;
     size_t size;
+
     bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
     if (bytes <= 0) return bytes;
     if (size <= 0) {
@@ -98,6 +100,27 @@ static int on_read(char *path) {
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
     err = netpipe_read_update(file, size);
+    if (err == -1) return -1;
+
+    return bytes;
+}
+
+static int on_read_request(char *path) {
+    int err, bytes;
+    size_t size;
+
+    bytes = readn(netpipefs_socket.fd, &size, sizeof(size_t));
+    if (bytes <= 0) return bytes;
+    if (size <= 0) {
+        EINVAL;
+        return -1;
+    }
+
+    DEBUG("remote: READ_REQUEST %s %ld bytes\n", path, size);
+
+    struct netpipe *file = netpipefs_get_open_file(path);
+    if (file == NULL) return -1;
+    err = netpipe_read_request(file, size);
     if (err == -1) return -1;
 
     return bytes;
@@ -143,6 +166,9 @@ static void *netpipefs_dispatcher_fun(void *unused) {
                         bytes = on_read(path);
                         if (bytes == -1) perror("on_read");
                         break;
+                    case READ_REQUEST:
+                        bytes = on_read_request(path);
+                        if (bytes == -1) perror("on_read_request");
                     default:
                         break;
                 }

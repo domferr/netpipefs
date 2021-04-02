@@ -21,6 +21,7 @@ enum netpipefs_header {
     OPEN = 100,
     CLOSE,
     READ,
+    READ_REQUEST,
     WRITE
 };
 
@@ -99,5 +100,16 @@ int send_flush_message(struct netpipefs_socket *skt, struct netpipe *file, size_
  * @return > 0 on success, 0 if the socket was closed, -1 on error
  */
 int send_read_message(struct netpipefs_socket *skt, const char *path, size_t size);
+
+/**
+ * Send READ_REQUEST message
+ *
+ * @param skt netpipefs socket structure
+ * @param path file path
+ * @param size how much data can be read
+ *
+ * @return > 0 on success, 0 if the socket was closed, -1 on error
+ */
+int send_read_request_message(struct netpipefs_socket *skt, const char *path, size_t size);
 
 #endif //NETPIPEFS_SOCKET_H

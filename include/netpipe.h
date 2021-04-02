@@ -6,7 +6,15 @@
 #include "cbuf.h"
 
 /** Print debug info about the given file */
-#define DEBUGFILE(file) DEBUG("   %s: %d readers, %d writers, %ld local bytes, %ld remote bytes\n", file->path, file->readers, file->writers, cbuf_size(file->buffer), file->remotesize)
+#define DEBUGFILE(file) \
+    do { if ((file)->open_mode == O_RDONLY) { \
+            DEBUG("[%s] %d readers, %d writers, %ld/%ld local buffer\n", \
+            (file)->path, (file)->readers, (file)->writers, cbuf_size((file)->buffer), cbuf_capacity((file)->buffer)); \
+        } else {        \
+            DEBUG("[%s] %d readers, %d writers, %ld/%ld local buffer, %ld/%ld remote bytes\n", \
+            (file)->path, (file)->readers, (file)->writers, cbuf_size((file)->buffer), cbuf_capacity((file)->buffer), (file)->remotesize, (file)->remotemax); \
+        }               \
+    } while(0)
 
 #define DEFAULT_PIPE_CAPACITY 4096
 
@@ -18,15 +26,15 @@ struct netpipe {
     int writers;    // number of writers
     int readers;    // number of readers
     cbuf_t *buffer;   // circular buffer
-    size_t remotesize;  // how many bytes there are inside the remote buffer
-    size_t remotecapacity;  // how much is the buffer capacity on the remote host
-    struct poll_handle *poll_handles;
+    size_t remotemax;  // max number of bytes that can be sent
+    size_t remotesize;  // number of bytes sent
     pthread_cond_t canopen; // wait for at least one reader and one writer
     pthread_cond_t rd;  // wait if the buffer is empty
     pthread_cond_t wr;  // wait if the buffer is full
     pthread_mutex_t mtx; // netpipe lock
     struct netpipe_req *wr_req;
     struct netpipe_req *rd_req;
+    struct poll_handle *poll_handles;
 };
 
 /**
@@ -124,13 +132,22 @@ int netpipe_recv(struct netpipe *file, size_t size);
 ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock);
 
 /**
- * Updates the netpipe after the remote host read.
+ * Notify the netpipe that the remote host read "size" bytes.
  *
  * @param file pointer to netpipe structure
  * @param size how many bytes were read from the remote host
  * @return 0 on success, -1 on error
  */
 int netpipe_read_update(struct netpipe *file, size_t size);
+
+/**
+ * Notify the netpipe that there are some readers waiting for "size" bytes.
+ *
+ * @param file pointer to netpipe structure
+ * @param size how many bytes the remote host is waiting for
+ * @return 0 on success, -1 on error
+ */
+int netpipe_read_request(struct netpipe *file, size_t size);
 
 /**
  * Do polling by setting the available events and registering a poll handle.

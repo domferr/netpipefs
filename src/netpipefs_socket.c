@@ -271,3 +271,19 @@ int send_read_message(struct netpipefs_socket *skt, const char *path, size_t siz
 
     return bytes;
 }
+
+int send_read_request_message(struct netpipefs_socket *skt, const char *path, size_t size) {
+    int err, bytes;
+
+    PTH(err, pthread_mutex_lock(&(skt->wr_mtx)), return -1)
+
+    bytes = send_socket_header(skt->fd, READ_REQUEST, path);
+    if (bytes > 0) {
+        bytes = writen(skt->fd, &size, sizeof(size_t));
+    }
+
+    PTH(err, pthread_mutex_unlock(&(skt->wr_mtx)), return -1)
+    if (bytes > 0) DEBUG("sent: READ_REQUEST %s %ld\n", path, size);
+
+    return bytes;
+}

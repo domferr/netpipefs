@@ -7,7 +7,7 @@ BENCH_READ_FILE=bench-read.txt    # benchmark file where to print read results
 OBS=1024  # write blocksize
 COUNT=1   # how many times should write
 IBS=$OBS  # read blocksize
-ITER=23   # number of iterations (23: until 4gb)
+ITER=22   # number of iterations (23: until 4gb)
 
 # empty out both files
 > $BENCH_WRITE_FILE
