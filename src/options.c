@@ -80,10 +80,10 @@ int netpipefs_opt_parse(const char *progname, struct fuse_args *args) {
         return 1;
     }
 
-    if (netpipefs_options.pipecapacity <= 0) {
+    /*if (netpipefs_options.pipecapacity < 0) {
         fprintf(stderr, "invalid pipe capacity\nsee '%s -h' for usage\n", progname);
         return 1;
-    }
+    }*/
 
     /* Check for debug flag */
     if (netpipefs_options.debug) {

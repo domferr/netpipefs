@@ -19,7 +19,7 @@ cbuf_t *cbuf_alloc(size_t capacity) {
     cbuf->capacity = capacity;
     cbuf->head = 0;
     cbuf->tail = 0;
-    cbuf->isfull = capacity == 0;
+    cbuf->isfull = 0;
     if (capacity == 0) {
         cbuf->data = NULL;
     } else {
@@ -40,6 +40,7 @@ void cbuf_free(cbuf_t *cbuf) {
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
     size_t put = 0;
+    if (cbuf->capacity == 0) return 0;
 
     while(put < size && !cbuf->isfull) {
         cbuf->data[cbuf->head] = *(data+put);
@@ -95,6 +96,7 @@ ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n) {
 
 ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n) {
     char *dataptr;
+    if (cbuf->capacity == 0) return 0;
 
     size_t linear_len;
     size_t   nleft;

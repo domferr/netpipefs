@@ -376,6 +376,7 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     size_t sent = 0, bytes, remaining;
 
     NOTZERO(netpipe_lock(file), return -1)
+    DEBUGFILE(file);
 
     if (file->force_exit || file->readers == 0) {
         errno = EPIPE;
@@ -397,7 +398,6 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     // If host can still receive data and local buffer is empty
     // Directly send data
     if (available_remote(file) > 0 && cbuf_empty(file->buffer)) {
-        DEBUG("netpipe_send and do_send\n");
         err = do_send(file, bufptr, size, &bytes);
         if (err <= 0) {
             netpipe_unlock(file);
@@ -416,7 +416,7 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     }
 
     // If there is space into the buffer and this request need to send data
-    // Put data from this request into the buffer (writeahead). Data put will be 0 if the buffer is full
+    // Put data from this request into the buffer (writeahead). Data put will be 0 if the buffer is full or has 0 capacity
     bytes = cbuf_put(file->buffer, bufptr, size);
     if (bytes > 0) {
         DEBUG("writeahead[%s] %ld bytes\n", file->path, bytes);
@@ -507,7 +507,7 @@ int netpipe_recv(struct netpipe *file, size_t size) {
     file->rd_req = req;
 
     // Put remaining data from socket to the buffer (readahead)
-    if (remaining > 0) {
+    if (remaining > 0 && cbuf_capacity(file->buffer) > 0) {
         dataread = cbuf_readn(netpipefs_socket.fd, file->buffer, remaining);
         if (dataread <= 0) {
             if (dataread == 0) DEBUG("cannot write locally: Connection lost!\n");
@@ -541,7 +541,7 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
         return -1;
     }
 
-    // Read from buffer (readahead). Bytes read can be zero if the buffer is empty
+    // Read from buffer (readahead). Bytes read can be zero if the buffer is empty or the capacity is zero
     err = do_buffered_read(file, bufptr, size, &read);
     if (err <= 0) {
         netpipe_unlock(file);
@@ -635,7 +635,7 @@ static size_t send_data(struct netpipe *file) {
 
     // If there are pending requests and there is space into the buffer
     // Put data from requests into the buffer (Writeahead)
-    while (req != NULL && !cbuf_full(file->buffer)) {
+    while (req != NULL && !cbuf_full(file->buffer) && cbuf_capacity(file->buffer) > 0) {
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
 
@@ -661,7 +661,6 @@ int netpipe_read_request(struct netpipe *file, size_t size) {
 
     file->remotemax += size;
 
-    DEBUG("netpipe_read_request and send_data\n");
     err = send_data(file);
     if (err > 0) PTH(err, pthread_cond_broadcast(&(file->wr)), return -1)
 
@@ -678,7 +677,6 @@ int netpipe_read_update(struct netpipe *file, size_t size) {
     file->remotemax -= size;
     file->remotesize -= size;
 
-    DEBUG("netpipe_read_update and send_data\n");
     err = send_data(file);
     if (err > 0) PTH(err, pthread_cond_broadcast(&(file->wr)), return -1)
 
@@ -710,7 +708,7 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
         PTH(err, pthread_cond_broadcast(&(file->wr)), netpipe_unlock(file); return -1)
     }
 
-    // If all the bytes were sent or nonclock is 1
+    // If all the bytes were sent or nonblock is 1
     remaining = cbuf_size(file->buffer);
     if (remaining == 0 || nonblock) {
         netpipe_unlock(file);
@@ -725,7 +723,7 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
 
     netpipe_req_t *request = netpipe_add_request(file, bufptr, remaining, O_WRONLY);
     while(!file->force_exit && request->bytes_processed != remaining && !request->error) {
-        PTH(err, pthread_cond_wait(&(file->wr), &(file->mtx)), netpipe_unlock(file); return -1)
+        PTH(err, pthread_cond_wait(&(file->wr), &(file->mtx)), free(request); free(bufptr); netpipe_unlock(file); return -1)
     }
 
     if (request->bytes_processed == 0 && (file->force_exit || request->error)) {
@@ -738,6 +736,7 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
 
     NOTZERO(netpipe_unlock(file), return -1)
 
+    free(bufptr);
     free(request);
     return datasent;
 }
@@ -783,10 +782,10 @@ int netpipe_close(struct netpipe *file, int mode) {
 
     if (mode == O_WRONLY) {
         file->writers--;
-        if (file->writers == 0) {
-            // there are no writers, then flush all data before closing
+        // if there aren't writers and there is something into the buffer
+        if (file->writers == 0 && !cbuf_empty(file->buffer)) {
             NOTZERO(netpipe_unlock(file), return -1)
-            bytes = netpipe_flush(file, 0);
+            bytes = netpipe_flush(file, 0); // then flush all data before closing
             NOTZERO(netpipe_lock(file), return -1)
             if (bytes <= 0) err = -1;
         }
