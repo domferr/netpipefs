@@ -25,13 +25,12 @@ struct netpipe {
     int force_exit; // operations on the netpipe should immediately end
     int writers;    // number of writers
     int readers;    // number of readers
-    cbuf_t *buffer;   // circular buffer
+    cbuf_t *buffer; // circular buffer
     size_t remotemax;  // max number of bytes that can be sent
-    size_t remotesize;  // number of bytes sent
+    size_t remotesize; // number of bytes sent
     pthread_cond_t canopen; // wait for at least one reader and one writer
-    pthread_cond_t rd;  // wait if the buffer is empty
-    pthread_cond_t wr;  // wait if the buffer is full
-    pthread_mutex_t mtx; // netpipe lock
+    pthread_cond_t close;   // wait that the buffer is flushed before close
+    pthread_mutex_t mtx;    // netpipe lock
     struct netpipe_req *wr_req;
     struct netpipe_req *rd_req;
     struct poll_handle *poll_handles;

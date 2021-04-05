@@ -229,8 +229,8 @@ int send_flush_message(struct netpipefs_socket *skt, struct netpipe *file, size_
 
     bytes = send_socket_header(skt->fd, WRITE, file->path);
     if (bytes > 0)
-        bytes = writen(skt->fd, &size, sizeof(size_t)); // TODO Check size
-    if (bytes > 0) {
+        bytes = writen(skt->fd, &size, sizeof(size_t));
+    if (bytes > 0 && size > 0) {
         bytes = cbuf_writen(skt->fd, file->buffer, size);
     }
 
