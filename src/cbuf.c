@@ -1,7 +1,6 @@
 #include <stdlib.h>
-#include <errno.h>
 #include <unistd.h>
-#include <stdio.h>
+#include <string.h>
 #include "../include/cbuf.h"
 
 struct cbuf_s {
@@ -43,7 +42,7 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
     if (cbuf->capacity == 0) return 0;
 
     while(put < size && !cbuf->isfull) {
-        cbuf->data[cbuf->head] = *(data+put);
+        cbuf->data[cbuf->head] = *(data + put);
         (cbuf->head)++;
         if (cbuf->head == cbuf->capacity) cbuf->head = 0;
         put++;
@@ -64,6 +63,59 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
         cbuf->isfull = 0;
     }
     return got;
+}
+
+size_t cbuf_get_memcpy(cbuf_t *cbuf, char *data, size_t size) {
+    if (cbuf->capacity == 0) return 0;
+
+    char *dataptr = data;
+    char *bufptr;
+    size_t   nleft;
+    size_t linear_len;
+
+    nleft = size;
+    while (nleft > 0 && !cbuf_empty(cbuf)) {
+        if (cbuf->head > cbuf->tail) linear_len = cbuf->head - cbuf->tail;
+        else linear_len = cbuf->capacity - cbuf->tail;
+        if (linear_len > nleft) linear_len = nleft;
+
+        bufptr = cbuf->data + cbuf->tail;
+        memcpy(dataptr, bufptr, linear_len);
+
+        nleft -= linear_len;
+        dataptr += linear_len;
+        cbuf->tail += linear_len;
+        if (cbuf->tail >= cbuf->capacity) cbuf->tail = 0;
+        cbuf->isfull = 0;
+    }
+
+    return(size - nleft); /* return >= 0 */
+}
+
+size_t cbuf_put_memcpy(cbuf_t *cbuf, const char *data, size_t size) {
+    if (cbuf->capacity == 0) return 0;
+    char *dataptr = (char *) data;
+    char *bufptr;
+    size_t   nleft;
+    size_t linear_len;
+
+    nleft = size;
+    while (nleft > 0 && !cbuf->isfull) {
+        if (cbuf->head >= cbuf->tail) linear_len = cbuf->capacity - cbuf->head;
+        else linear_len = cbuf->tail - cbuf->head;
+        if (linear_len > nleft) linear_len = nleft;
+
+        bufptr = cbuf->data + cbuf->head;
+        memcpy(bufptr, dataptr, linear_len);
+
+        nleft -= linear_len;
+        dataptr += linear_len;
+        cbuf->head += linear_len;
+        if (cbuf->head >= cbuf->capacity) cbuf->head = 0;
+        cbuf->isfull = cbuf->head == cbuf->tail;
+    }
+
+    return (size - nleft);
 }
 
 ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n) {

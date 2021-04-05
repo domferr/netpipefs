@@ -43,6 +43,26 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size);
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size);
 
 /**
+ * Same as cbuf_put but it uses memcpy() function.
+ *
+ * @param cbuf the buffer
+ * @param data the data
+ * @param size how much of the data should be put
+ * @return how much data was put
+ */
+size_t cbuf_put_memcpy(cbuf_t *cbuf, const char *data, size_t size);
+
+/**
+ * Same as cbuf_get but it uses memcpy() function.
+ *
+ * @param cbuf the buffer
+ * @param data data got will be added into this pointer
+ * @param size how much data should get
+ * @return how much data was got
+ */
+size_t cbuf_get_memcpy(cbuf_t *cbuf, char *data, size_t size);
+
+/**
  * Read "n" bytes from the given file descriptor and puts data into the circular buffer.
  *
  * @param fd file descriptor
@@ -52,6 +72,14 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size);
  */
 ssize_t cbuf_readn(int fd, cbuf_t *cbuf, size_t n);
 
+/**
+ * Write "n" bytes to the given file descriptor by getting data from the circular buffer.
+ *
+ * @param fd file descriptor
+ * @param cbuf buffer pointer
+ * @param n how many bytes to write
+ * @return number of bytes wrote or -1 on error or 0 on end of file
+ */
 ssize_t cbuf_writen(int fd, cbuf_t *cbuf, size_t n);
 
 /**
