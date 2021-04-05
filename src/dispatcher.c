@@ -38,13 +38,11 @@ static int on_close(char *path) {
     bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
-    DEBUG("remote: CLOSE %s %d\n", path, mode);
-
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
-    DEBUG("before netpipe_close_update\n");
+
+    DEBUG("remote: CLOSE %s %d\n", path, mode);
     MINUS1(netpipe_close_update(file, mode), return -1)
-    DEBUG("after netpipe_close_update\n");
 
     return bytes; // > 0
 }
@@ -70,8 +68,7 @@ static int on_write(char *path) {
         return -1;
     }
 
-    DEBUG("remote: WRITE %s %d bytes DATA\n", path, bytes);
-
+    DEBUG("remote: WRITE %s %ld bytes DATA\n", path, size);
     bytes = netpipe_recv(file, size);
     if (bytes <= 0) {
         if (errno == EPIPE) {
@@ -95,10 +92,10 @@ static int on_read(char *path) {
         return -1;
     }
 
-    DEBUG("remote: READ %s %ld bytes\n", path, size);
-
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
+
+    DEBUG("remote: READ %s %ld bytes\n", path, size);
     err = netpipe_read_update(file, size);
     if (err == -1) return -1;
 
@@ -116,10 +113,10 @@ static int on_read_request(char *path) {
         return -1;
     }
 
-    DEBUG("remote: READ_REQUEST %s %ld bytes\n", path, size);
-
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
+
+    DEBUG("remote: READ_REQUEST %s %ld bytes\n", path, size);
     err = netpipe_read_request(file, size);
     if (err == -1) return -1;
 
