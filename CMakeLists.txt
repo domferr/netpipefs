@@ -22,7 +22,7 @@ add_executable(openfiles.test src/openfiles.c include/openfiles.h test/openfiles
         src/options.c include/options.h src/cbuf.c include/cbuf.h src/netpipefs_socket.c include/netpipefs_socket.h
         src/scfiles.c include/scfiles.h src/sock.c include/sock.h)
 # cbuf.test
-add_executable(cbuf.test test/cbuf.test.c src/cbuf.c include/cbuf.h test/testutilities.h )
+add_executable(cbuf.test test/cbuf.test.c src/cbuf.c include/cbuf.h test/testutilities.h test/netpipe.test.c)
 
 # EXAMPLES
 # simpleprodcons

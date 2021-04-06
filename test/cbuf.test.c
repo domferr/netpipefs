@@ -56,11 +56,24 @@ static void test_operations(void) {
 }
 
 static void test_zero_capacity(void) {
-    size_t capacity = 10;
-
     /* Alloc buffer */
-    cbuf_t *buffer = cbuf_alloc(capacity);
+    cbuf_t *buffer = cbuf_alloc(0);
     test(buffer != NULL)
+    test(cbuf_empty(buffer) == 1)
+    test(cbuf_size(buffer) == 0)
+    test(cbuf_full(buffer) == 0)
+
+    char dummydata[10];
+    for(size_t i=0; i<10; i++) dummydata[i] = (char)(97+i);
+
+    /* Put data into the buffer */
+    test(cbuf_put(buffer, dummydata, 5) == 0)
+    test(cbuf_size(buffer) == 0)
+
+    /* Get data from the buffer */
+    char datagot[10];
+    test(cbuf_get(buffer, datagot, 10) == 0)
+    test(cbuf_size(buffer) == 0)
 
     /* Free buffer */
     cbuf_free(buffer);
