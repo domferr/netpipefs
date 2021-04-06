@@ -2,12 +2,30 @@
 #include "testutilities.h"
 #include "../include/cbuf.h"
 
+static void test_operations(void);
+static void test_zero_capacity(void);
+static void test_from_file_descriptor(void);
+
 int main(int argc, char** argv) {
+    test_operations();
+    test_zero_capacity();
+    test_from_file_descriptor();
+    testpassed("Circular buffer");
+    return 0;
+}
+
+static void test_operations(void) {
     size_t capacity = 10;
 
     /* Alloc buffer */
     cbuf_t *buffer = cbuf_alloc(capacity);
     test(buffer != NULL)
+    test(cbuf_empty(buffer) == 1)
+    test(cbuf_size(buffer) == 0)
+
+    /* Put zero bytes */
+    test(cbuf_put(buffer, NULL, 0) == 0)
+    test(cbuf_empty(buffer) == 1)
 
     char dummydata[capacity];
     for(size_t i=0; i<capacity; i++) dummydata[i] = (char)(97+i);
@@ -35,26 +53,61 @@ int main(int argc, char** argv) {
 
     /* Free buffer */
     cbuf_free(buffer);
+}
 
-    int pipefd[2];
-    if (pipe(pipefd) == -1) return EXIT_FAILURE;
+static void test_zero_capacity(void) {
+    size_t capacity = 10;
 
     /* Alloc buffer */
-    buffer = cbuf_alloc(capacity);
+    cbuf_t *buffer = cbuf_alloc(capacity);
     test(buffer != NULL)
 
-    if (write(pipefd[1], dummydata, capacity - capacity/4) < (ssize_t)(capacity - capacity/4)) return EXIT_FAILURE;
+    /* Free buffer */
+    cbuf_free(buffer);
+}
+
+static void test_from_file_descriptor(void) {
+    size_t capacity = 10, bytes;
+    int pipefd[2];
+    if (pipe(pipefd) == -1) return;
+
+    /* Alloc buffer */
+    cbuf_t *buffer = cbuf_alloc(capacity);
+    test(buffer != NULL)
+
+    char dummydata[capacity];
+    for(size_t i=0; i<capacity; i++) dummydata[i] = (char)(97+i);
+
+    /* Write into the pipe */
+    bytes = capacity - capacity/4;
+    if (write(pipefd[1], dummydata, bytes) < (ssize_t)(bytes)) {
+        perror("can't test from file descriptor");
+        return;
+    }
 
     /* Put into buffer from pipe */
-    test(cbuf_readn(pipefd[0], buffer, capacity - capacity/4) == (ssize_t)(capacity - capacity/4))
-    test(cbuf_size(buffer) == capacity - capacity/4)
-    test(cbuf_get(buffer, datagot, capacity/3) == capacity/3)
+    test(cbuf_readn(pipefd[0], buffer, bytes) == (ssize_t)(bytes))
+    test(cbuf_size(buffer) == bytes)
 
-    if (write(pipefd[1], dummydata, capacity/3 + capacity/4) < (ssize_t)(capacity/3 + capacity/4)) return EXIT_FAILURE;
-    test(cbuf_readn(pipefd[0], buffer, capacity/3 + capacity/4) == (ssize_t)(capacity/3 + capacity/4))
-    test(cbuf_size(buffer) == capacity)
+    /* Writen from buffer to the pipe */
+    bytes = capacity/3;
+    test(cbuf_writen(pipefd[1], buffer, bytes) == (ssize_t)(bytes))
 
-    testpassed("Circular buffer");
+    /* Read from pipe */
+    char datagot[bytes];
+    if (read(pipefd[0], datagot, bytes) < (ssize_t)(bytes)) {
+        perror("can't test from file descriptor");
+        return;
+    }
 
-    return 0;
+    /* Compare data put with data got */
+    for(size_t i = 0; i<bytes; i++) {
+        test(datagot[i] == dummydata[i])
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    /* Free buffer */
+    cbuf_free(buffer);
 }
