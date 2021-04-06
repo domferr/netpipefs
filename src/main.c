@@ -158,12 +158,23 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
  *
  */
 static int open_callback(const char *path, struct fuse_file_info *fi) {
+    int err, just_created = 0;
     int mode = fi->flags & O_ACCMODE;
     int nonblock = fi->flags & O_NONBLOCK;
     struct netpipe *file = NULL;
 
-    file = netpipe_open(path, mode, nonblock);
+    /* Get the file struct or create it */
+    file = netpipefs_get_or_create_open_file(path, &just_created);
     if (file == NULL) return -errno;
+
+    err = netpipe_open(file, mode, nonblock);
+    if (err == -1) {
+        if (just_created) {
+            netpipefs_remove_open_file(path);
+            netpipe_free(file, NULL); // for sure there is no poll handle
+        }
+        return -errno;
+    }
 
     fi->fh = (uint64_t) file;
     fi->direct_io = 1;   // avoid kernel caching
@@ -270,7 +281,7 @@ static int release_callback(const char *path, struct fuse_file_info *fi) {
     int mode = fi->flags & O_ACCMODE;
     struct netpipe *file = (struct netpipe *) fi->fh;
 
-    int ret = netpipe_close(file, mode);
+    int ret = netpipe_close(file, mode, &netpipefs_remove_open_file, &netpipefs_poll_notify);
     if (ret == -1) return -errno;
     return 0; //ignored
 }
@@ -340,6 +351,7 @@ int main(int argc, char** argv) {
     /* Init socket mutex */
     PTHERR(err, pthread_mutex_init(&(netpipefs_socket.wr_mtx), NULL), netpipefs_opt_free(&args); return EXIT_FAILURE)
 
+    // if delay connect or it will use af_unix sockets
     if (!netpipefs_options.delayconnect) {
         /* Connect before mounting */
         ret = establish_socket_connection(&netpipefs_socket, netpipefs_options.timeout);

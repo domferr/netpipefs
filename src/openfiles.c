@@ -31,7 +31,7 @@ int netpipefs_shutdown(void) {
 
     if (open_files_table != NULL) {
         icl_hash_foreach(open_files_table, i, entry, path, file) {
-            err = netpipe_force_exit(file);
+            err = netpipe_force_exit(file, &netpipefs_poll_notify);
             if (err == -1) {
                 pthread_mutex_unlock(&open_files_mtx);
                 return -1;
@@ -55,7 +55,7 @@ void netpipefs_poll_notify(void *ph) {
 
 static void openfiles_free_netpipe(void *np) {
     struct netpipe *file = (struct netpipe *) np;
-    netpipe_free(file);
+    netpipe_free(file, &netpipefs_poll_destroy);
 }
 
 int netpipefs_open_files_table_destroy(void) {
@@ -116,7 +116,7 @@ struct netpipe *netpipefs_get_or_create_open_file(const char *path, int *just_cr
 
     if (file != NULL && *just_created) {
         if (icl_hash_insert(open_files_table, (void*) file->path, file) == NULL) {
-            netpipe_free(file); // there are no poll handle
+            netpipe_free(file, NULL); // there are no poll handle
             file = NULL;
         }
     }

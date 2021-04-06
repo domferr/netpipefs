@@ -17,8 +17,7 @@ LDFLAGS 	= `pkg-config fuse --libs` -L $(LIBDIR) # required by FUSE
 LIBS		= -lpthread
 
 # dependencies for netpipefs executable
-OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
-				$(OBJDIR)/scfiles.o		\
+OBJS_NETPIPEFS =$(OBJDIR)/scfiles.o		\
 				$(OBJDIR)/sock.o		\
 				$(OBJDIR)/netpipefs_socket.o\
 				$(OBJDIR)/dispatcher.o	\
@@ -31,7 +30,7 @@ OBJS_NETPIPEFS =$(OBJDIR)/main.o		\
 				$(OBJDIR)/utils.o
 
 TARGETS	= $(BINDIR)/netpipefs
-TESTS	= $(BINDIR)/utils.test $(BINDIR)/cbuf.test $(BINDIR)/openfiles.test
+TESTS	= $(BINDIR)/utils.test $(BINDIR)/cbuf.test $(BINDIR)/openfiles.test $(BINDIR)/netpipe.test
 
 .PHONY: all test clean cleanall usage run_test checkmount unmount forceunmount mount_prod mount_cons debug_prod debug_cons
 
@@ -57,13 +56,16 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 $(OBJDIR)/%.test.o: $(TSTDIR)/%.test.c $(TSTDIR)/testutilities.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-$(BINDIR)/netpipefs: $(OBJS_NETPIPEFS)
+$(BINDIR)/netpipefs: $(OBJDIR)/main.o $(OBJS_NETPIPEFS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 $(BINDIR)/%.test: $(OBJDIR)/%.test.o $(OBJDIR)/%.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJDIR)/netpipe.o $(OBJDIR)/cbuf.o $(OBJDIR)/icl_hash.o $(OBJDIR)/scfiles.o $(OBJDIR)/netpipefs_socket.o $(OBJDIR)/sock.o $(OBJDIR)/utils.o $(OBJDIR)/options.o
+$(BINDIR)/openfiles.test: $(OBJDIR)/openfiles.test.o $(OBJDIR)/openfiles.o $(OBJS_NETPIPEFS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+$(BINDIR)/netpipe.test: $(OBJDIR)/netpipe.test.o $(OBJS_NETPIPEFS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:

@@ -25,6 +25,8 @@ enum netpipefs_header {
     WRITE
 };
 
+
+
 /**
  * Establish a socket connection with a maximum time expressed my the given timeout value.
  *
@@ -88,6 +90,15 @@ int send_close_message(struct netpipefs_socket *skt, const char *path, int mode)
  */
 int send_write_message(struct netpipefs_socket *skt, const char *path, const char *buf, size_t size);
 
+/**
+ * Send WRITE message like the function send_write_message() but get data from file buffer
+ *
+ * @param skt netpipefs socket structure
+ * @param file the file
+ * @param size how much data should be sent
+ *
+ * @return > 0 on success, 0 if the socket was closed, -1 on error
+ */
 int send_flush_message(struct netpipefs_socket *skt, struct netpipe *file, size_t size);
 
 /**

@@ -48,10 +48,10 @@ struct netpipe *netpipe_alloc(const char *path);
  * Frees the memory allocated for the given file.
  *
  * @param file the file structure
- * @param free_pollhandle function used to free each pollhandle
+ * @param poll_destroy function used to free each poll handle
  * @return 0 on success, -1 on error and it sets errno
  */
-int netpipe_free(struct netpipe *file);
+int netpipe_free(struct netpipe *file, void (*poll_destroy)(void *));
 
 /**
  * Lock the given file
@@ -70,26 +70,25 @@ int netpipe_lock(struct netpipe *file);
 int netpipe_unlock(struct netpipe *file);
 
 /**
- * Open a netpipe. If nonblock is 0 then it waits until there is at least one reader and one writer.
+ * Open the given netpipe. If nonblock is 0 then it waits until there is at least one reader and one writer.
  * If nonblock is 1 but there isn't at least one writer and on reader then this function returns NULL
  * and errno is set to EAGAIN.
  *
- * @param path netpipe's path
+ * @param file the netpipe that should be open
  * @param mode open mode
  * @param nonblock 1 will mean that open shouldn't wait for at least one reader and one writer
- * @return a pointer to the netpipe that was open. On error it returns NULL. It also returns NULL if
- * nonblock is 1 but there isn't at least one reader and one writer
+ * @return 0 on success, -1 on error. It also returns -1 if nonblock is 1 but there isn't at least one reader and one writer
  */
-struct netpipe *netpipe_open(const char *path, int mode, int nonblock);
+int netpipe_open(struct netpipe *file, int mode, int nonblock);
 
 /**
  * Updates the netpipe and notifies that it was open remotely with the specified mode.
  *
- * @param path netpipe's path
+ * @param file the netpipe that was open remotely
  * @param mode open mode
- * @return a pointer to the netpipe that was open or NULL on error
+ * @return 0 on success, -1 on error
  */
-struct netpipe *netpipe_open_update(const char *path, int mode);
+int netpipe_open_update(struct netpipe *file, int mode);
 
 /**
  * Send "size" bytes to the remote host. This function will block (if nonblock is 0) when the remote netpipe
@@ -111,9 +110,10 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
  *
  * @param file pointer to netpipe structure
  * @param size how many bytes can be read from socket
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return how much data was received or -1 on error
  */
-int netpipe_recv(struct netpipe *file, size_t size);
+int netpipe_recv(struct netpipe *file, size_t size, void (*poll_notify)(void *)) ;
 
 /**
  * Read "size" bytes from netpipe. Data read is put into the given buffer. If nonblock
@@ -135,18 +135,20 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
  *
  * @param file pointer to netpipe structure
  * @param size how many bytes were read from the remote host
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return 0 on success, -1 on error
  */
-int netpipe_read_update(struct netpipe *file, size_t size);
+int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(void *));
 
 /**
  * Notify the netpipe that there are some readers waiting for "size" bytes.
  *
  * @param file pointer to netpipe structure
  * @param size how many bytes the remote host is waiting for
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return 0 on success, -1 on error
  */
-int netpipe_read_request(struct netpipe *file, size_t size);
+int netpipe_read_request(struct netpipe *file, size_t size, void (*poll_notify)(void *));
 
 /**
  * Do polling by setting the available events and registering a poll handle.
@@ -175,18 +177,22 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock);
  *
  * @param file pointer to netpipe structure
  * @param mode netpipe was open with this mode
+ * @param remove_open_file pointer to a function used to remove the open file safely from any data structure before it is freed
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return 0 on success, -1 on error
  */
-int netpipe_close(struct netpipe *file, int mode);
+int netpipe_close(struct netpipe *file, int mode, int (*remove_open_file)(const char *), void (*poll_notify)(void *));
 
 /**
  * Update the netpipe because the remote host closed with the given mode.
  *
  * @param file pointer to netpipe structure
  * @param mode netpipe was open with this mode
+ * @param remove_open_file pointer to a function used to remove the open file safely from any data structure before it is freed
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return 0 on success, -1 on error
  */
-int netpipe_close_update(struct netpipe *file, int mode);
+int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)(const char *), void (*poll_notify)(void *));
 
 /**
  * Forces all the operations on this netpipe to stop and immediately end.
@@ -194,8 +200,9 @@ int netpipe_close_update(struct netpipe *file, int mode);
  * on this netpipe.
  *
  * @param file pointer to netpipe structure
+ * @param poll_notify pointer to a function that will be called to notify each registered poll handle
  * @return 0 on success, -1 on error
  */
-int netpipe_force_exit(struct netpipe *file);
+int netpipe_force_exit(struct netpipe *file, void (*poll_notify)(void *));
 
 #endif //NETPIPE_H

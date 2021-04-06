@@ -8,7 +8,6 @@
 #include <arpa/inet.h>
 #include "../include/options.h"
 #include "../include/netpipefs_socket.h"
-#include "../include/netpipe.h"
 #include "../include/scfiles.h"
 #include "../include/sock.h"
 #include "../include/utils.h"
@@ -81,6 +80,8 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     char *host_received = NULL;
     struct sockaddr *conn_sa;
     struct sockaddr *acc_sa;
+    socklen_t acc_sa_len;
+
     size_t host_len = strlen(netpipefs_options.hostip);
     if (host_len == 0) return -1;
 
@@ -92,6 +93,7 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
         afunix_address(&conn_sa_un, netpipefs_options.hostport);
         afunix_address(&acc_sa_un, netpipefs_options.port);
         acc_sa = (struct sockaddr *) &acc_sa_un;
+        acc_sa_len = sizeof(acc_sa_un);
         conn_sa = (struct sockaddr *) &conn_sa_un;
     } else { // af_inet
         struct sockaddr_in acc_sa_in;
@@ -101,11 +103,17 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
         err = afinet_address(&acc_sa_in, netpipefs_options.port, NULL);
         if (err == -1) return -1;
         acc_sa = (struct sockaddr *) &acc_sa_in;
+        acc_sa_len = sizeof(acc_sa_in);
         conn_sa = (struct sockaddr *) &conn_sa_in;
     }
 
+    /* Create sockets */
     MINUS1(fdconnect = socket(conn_sa->sa_family, SOCK_STREAM, 0), return -1)
     MINUS1(fdlisten = socket(acc_sa->sa_family, SOCK_STREAM, 0), close(fdconnect); return -1)
+
+    /* Bind and listen */
+    MINUS1(bind(fdlisten, acc_sa, acc_sa_len), close(fdlisten); close(fdconnect); return -1)
+    MINUS1(listen(fdlisten, SOMAXCONN), close(fdlisten); return -1)
 
     fdaccepted = sock_connect_while_accept(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
     // do not listen for other connections

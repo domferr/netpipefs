@@ -27,10 +27,6 @@ int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, s
     int connflags, res, nsel, accepted_fd = -1, connectdone = 0;
     fd_set rset, wset;
 
-    /* Bind and listen */
-    MINUS1(bind(fdacc, acc_sa, get_socklen(acc_sa)), return -1)
-    MINUS1(listen(fdacc, SOMAXCONN), return -1)
-
     /* Set socket for connect to nonblock */
     MINUS1(connflags = fcntl(fdconn, F_GETFL, 0), return -1)
     MINUS1(fcntl(fdconn, F_SETFL, connflags | O_NONBLOCK), return -1)

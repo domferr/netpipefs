@@ -22,13 +22,23 @@ static struct dispatcher dispatcher = {0, {-1,-1} };
 extern struct netpipefs_socket netpipefs_socket;
 
 static int on_open(char *path) {
-    int bytes, mode;
+    int bytes, mode, just_created = 0;
 
     bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
     DEBUG("remote: OPEN %s %d\n", path, mode);
-    EQNULL(netpipe_open_update(path, mode), return -1)
+    /* Get the file struct or create it */
+    struct netpipe *file = netpipefs_get_or_create_open_file(path, &just_created);
+    if (file == NULL) return -1;
+    bytes = netpipe_open_update(file, mode);
+    if (bytes == -1) {
+        if (just_created) {
+            netpipefs_remove_open_file(path);
+            netpipe_free(file, NULL); // for sure there is no poll handle
+        }
+        return -1;
+    }
 
     return 1; // > 0
 }
@@ -42,7 +52,7 @@ static int on_close(char *path) {
     if (file == NULL) return -1;
 
     DEBUG("remote: CLOSE %s %d\n", path, mode);
-    MINUS1(netpipe_close_update(file, mode), return -1)
+    MINUS1(netpipe_close_update(file, mode, &netpipefs_remove_open_file, &netpipefs_poll_notify), return -1)
 
     return bytes; // > 0
 }
@@ -69,7 +79,7 @@ static int on_write(char *path) {
     }
 
     DEBUG("remote: WRITE %s %ld bytes DATA\n", path, size);
-    bytes = netpipe_recv(file, size);
+    bytes = netpipe_recv(file, size, &netpipefs_poll_notify);
     if (bytes <= 0) {
         if (errno == EPIPE) {
             DEBUG("on write broken pipe\n");
@@ -96,7 +106,7 @@ static int on_read(char *path) {
     if (file == NULL) return -1;
 
     DEBUG("remote: READ %s %ld bytes\n", path, size);
-    err = netpipe_read_update(file, size);
+    err = netpipe_read_update(file, size, &netpipefs_poll_notify);
     if (err == -1) return -1;
 
     return bytes;
@@ -117,7 +127,7 @@ static int on_read_request(char *path) {
     if (file == NULL) return -1;
 
     DEBUG("remote: READ_REQUEST %s %ld bytes\n", path, size);
-    err = netpipe_read_request(file, size);
+    err = netpipe_read_request(file, size, &netpipefs_poll_notify);
     if (err == -1) return -1;
 
     return bytes;
