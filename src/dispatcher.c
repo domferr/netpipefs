@@ -27,10 +27,11 @@ static int on_open(char *path) {
     bytes = readn(netpipefs_socket.fd, &mode, sizeof(int));
     if (bytes <= 0) return bytes;
 
-    DEBUG("remote: OPEN %s %d\n", path, mode);
     /* Get the file struct or create it */
     struct netpipe *file = netpipefs_get_or_create_open_file(path, &just_created);
     if (file == NULL) return -1;
+
+    DEBUG("remote: OPEN %s %d\n", path, mode);
     bytes = netpipe_open_update(file, mode);
     if (bytes == -1) {
         if (just_created) {

@@ -544,7 +544,7 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
 
     if (file->writers == 0) {
         netpipe_unlock(file);
-        return 0;
+        return read;
     }
 
     remaining = size - read;
@@ -664,6 +664,8 @@ int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(v
     NOTZERO(netpipe_lock(file), return -1)
 
     file->remotemax -= size;
+    if (file->remotemax < netpipefs_socket.remotepipecapacity)
+        file->remotemax = netpipefs_socket.remotepipecapacity;
     file->remotesize -= size;
 
     err = send_data(file);
@@ -709,6 +711,8 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
         PTH(err, pthread_cond_wait(&(file->close), &(file->mtx)), netpipe_unlock(file); return -1)
     }
 
+    DEBUG("after flush ");
+    DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
     return datasent;
@@ -775,7 +779,7 @@ int netpipe_close(struct netpipe *file, int mode, int (*remove_open_file)(const 
     bytes = send_close_message(&netpipefs_socket, file->path, mode);
     if (bytes <= 0) err = -1;
 
-    if (file->writers == 0 && file->readers == 0) {
+    if (file->writers == 0 && file->readers == 0 && available_remote(file) == 0) {
         if (remove_open_file) MINUS1(remove_open_file(file->path), err = -1)
         NOTZERO(netpipe_unlock(file), err = -1)
         MINUS1(netpipe_free(file, NULL), err = -1)
@@ -808,6 +812,8 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
     } else if (mode == O_RDONLY) {
         file->readers--;
         if (file->readers == 0) {
+            file->remotesize = 0;
+            file->remotemax = netpipefs_socket.remotepipecapacity;
             req = file->wr_req;
             while(req != NULL) { // set error = EPIPE to all read requests
                 req->error = EPIPE;
@@ -818,11 +824,12 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
         }
     }
 
+    DEBUG("netpipe_close_update ");
     DEBUGFILE(file);
 
     loop_poll_notify(file, poll_notify);
 
-    if (file->writers == 0 && file->readers == 0) {
+    if (file->writers == 0 && file->readers == 0 && available_remote(file) == 0) {
         err = 0;
         if (remove_open_file) MINUS1(remove_open_file(file->path), err = -1)
         MINUS1(netpipe_unlock(file), err = -1)

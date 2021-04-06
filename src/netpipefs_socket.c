@@ -55,6 +55,11 @@ static void afunix_address(struct sockaddr_un *sun, int port) {
     strncpy(sun->sun_path, sockname, UNIX_PATH_MAX);
 }
 
+static int unlink_afunix_socket(int port) {
+    char sockname[UNIX_PATH_MAX];
+    sprintf(sockname, "%s%d.sock", BASESOCKNAME, port);
+    return unlink(sockname);
+}
 /**
  * Compares the given ip addresses and returns 1, 0 or -1 if the first is greater or equal or less than the second.
  * If the ip addresses are not valid or "localhost" or are the same then it returns 1, 0 or -1 if the first port
@@ -79,8 +84,6 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
     int err, fdlisten, fdaccepted, fdconnect, comparison, localhost;
     char *host_received = NULL;
     struct sockaddr *conn_sa;
-    struct sockaddr *acc_sa;
-    socklen_t acc_sa_len;
 
     size_t host_len = strlen(netpipefs_options.hostip);
     if (host_len == 0) return -1;
@@ -91,35 +94,39 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
         struct sockaddr_un acc_sa_un;
         struct sockaddr_un conn_sa_un;
         afunix_address(&conn_sa_un, netpipefs_options.hostport);
-        afunix_address(&acc_sa_un, netpipefs_options.port);
-        acc_sa = (struct sockaddr *) &acc_sa_un;
-        acc_sa_len = sizeof(acc_sa_un);
         conn_sa = (struct sockaddr *) &conn_sa_un;
+        afunix_address(&acc_sa_un, netpipefs_options.port);
+
+        /* Create accept() socket */
+        MINUS1(fdlisten = socket(acc_sa_un.sun_family, SOCK_STREAM, 0), return -1)
+        /* Bind */
+        MINUS1(bind(fdlisten, (const struct sockaddr *) &acc_sa_un, sizeof(acc_sa_un)), close(fdlisten); return -1)
     } else { // af_inet
         struct sockaddr_in acc_sa_in;
         struct sockaddr_in conn_sa_in;
         err = afinet_address(&conn_sa_in, netpipefs_options.hostport, netpipefs_options.hostip);
         if (err == -1) return -1;
+        conn_sa = (struct sockaddr *) &conn_sa_in;
+
         err = afinet_address(&acc_sa_in, netpipefs_options.port, NULL);
         if (err == -1) return -1;
-        acc_sa = (struct sockaddr *) &acc_sa_in;
-        acc_sa_len = sizeof(acc_sa_in);
-        conn_sa = (struct sockaddr *) &conn_sa_in;
+
+        /* Create accept() socket */
+        MINUS1(fdlisten = socket(acc_sa_in.sin_family, SOCK_STREAM, 0), return -1)
+        /* Bind */
+        MINUS1(bind(fdlisten, (const struct sockaddr *) &acc_sa_in, sizeof(acc_sa_in)), close(fdlisten); return -1)
     }
 
-    /* Create sockets */
+    /* Create connect() socket */
     MINUS1(fdconnect = socket(conn_sa->sa_family, SOCK_STREAM, 0), return -1)
-    MINUS1(fdlisten = socket(acc_sa->sa_family, SOCK_STREAM, 0), close(fdconnect); return -1)
+    /* Listen */
+    MINUS1(listen(fdlisten, SOMAXCONN), close(fdlisten); close(fdconnect); return -1)
 
-    /* Bind and listen */
-    MINUS1(bind(fdlisten, acc_sa, acc_sa_len), close(fdlisten); close(fdconnect); return -1)
-    MINUS1(listen(fdlisten, SOMAXCONN), close(fdlisten); return -1)
-
-    fdaccepted = sock_connect_while_accept(fdconnect, fdlisten, conn_sa, acc_sa, timeout, CONNECT_INTERVAL);
+    fdaccepted = sock_connect_while_accept(fdconnect, fdlisten, conn_sa, timeout, CONNECT_INTERVAL);
     // do not listen for other connections
     close(fdlisten);
-    if (acc_sa->sa_family == AF_UNIX)
-        MINUS1(unlink(((struct sockaddr_un *) acc_sa)->sun_path), goto error)
+    if (localhost)
+        MINUS1(unlink_afunix_socket(netpipefs_options.port), goto error)
 
     if (fdaccepted == -1) { // double connect failed
         close(fdconnect);

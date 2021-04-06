@@ -21,7 +21,7 @@ static socklen_t get_socklen(struct sockaddr *sa) {
     return 0; // unsupported socket family
 }
 
-int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, struct sockaddr *acc_sa, long timeout, long interval) {
+int sock_connect_while_accept(int fdconn, int fdacc, struct sockaddr *conn_sa, long timeout, long interval) {
     struct timeval select_timeout;
     long remaining, sleeptime;
     int connflags, res, nsel, accepted_fd = -1, connectdone = 0;
