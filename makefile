@@ -101,7 +101,7 @@ PROD_MOUNTPOINT 	= ./tmp/prod
 CONS_MOUNTPOINT 	= ./tmp/cons
 
 mount_prod: all
-	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=65536 --timeout=6000 -delayconnect $(PROD_MOUNTPOINT)
+	$(BINDIR)/netpipefs -p $(PROD_PORT) --hostip=$(CONS_HOST) --hostport=$(CONS_PORT) --pipecapacity=0 --timeout=6000 -delayconnect $(PROD_MOUNTPOINT)
 
 mount_cons: all
 	$(BINDIR)/netpipefs --port=$(CONS_PORT) --hostip=$(PROD_HOST) --hostport=$(PROD_PORT) --timeout=10000 --pipecapacity=0 $(CONS_MOUNTPOINT)

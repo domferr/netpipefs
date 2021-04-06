@@ -378,9 +378,9 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     }
     if (bytes > 0) DEBUG("flush[%s] %ld bytes\n", file->path, bytes);
 
-    // If host can still receive data and local buffer is empty
+    // If host can still receive data and local buffer is empty or buffer has zero capacity
     // Directly send data
-    if (available_remote(file) > 0 && cbuf_empty(file->buffer)) {
+    if (available_remote(file) > 0 && (cbuf_empty(file->buffer) || cbuf_capacity(file->buffer) == 0)) {
         err = do_send(file, bufptr, size, &bytes);
         if (err <= 0) {
             netpipe_unlock(file);
@@ -824,7 +824,6 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
         }
     }
 
-    DEBUG("netpipe_close_update ");
     DEBUGFILE(file);
 
     loop_poll_notify(file, poll_notify);
