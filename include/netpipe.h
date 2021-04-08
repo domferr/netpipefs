@@ -31,8 +31,8 @@ struct netpipe {
     pthread_cond_t canopen; // wait for at least one reader and one writer
     pthread_cond_t close;   // wait that the buffer is flushed before close
     pthread_mutex_t mtx;    // netpipe lock
-    struct netpipe_req *wr_req;
-    struct netpipe_req *rd_req;
+    struct netpipe_req_l *wr_req_list; // FIFO list of write requests
+    struct netpipe_req_l *rd_req_list; // FIFO list of read requests
     struct poll_handle *poll_handles;
 };
 
