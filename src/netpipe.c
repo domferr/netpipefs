@@ -62,14 +62,11 @@ static netpipe_req_t *netpipe_add_request(struct netpipe *file, char *buf, size_
         return NULL;
     }
 
-    // pick the list based on the mode
-    netpipe_req_l *list = mode == O_RDONLY ? file->rd_req_list:file->wr_req_list;
-
     // add to the end of the list
     new_req->next = NULL;
-    if (list->tail != NULL) (list->tail)->next = new_req;
-    list->tail = new_req;
-    if (list->head == NULL) list->head = new_req;
+    if ((file->req_l)->tail != NULL) ((file->req_l)->tail)->next = new_req;
+    (file->req_l)->tail = new_req;
+    if ((file->req_l)->head == NULL) (file->req_l)->head = new_req;
 
     return new_req;
 }
@@ -85,25 +82,16 @@ struct netpipe *netpipe_alloc(const char *path) {
     int err;
     struct netpipe *file = (struct netpipe *) malloc(sizeof(struct netpipe));
     EQNULL(file, return NULL)
-    file->wr_req_list = (struct netpipe_req_l *) malloc(sizeof(struct netpipe_req_l));
-    if (file->wr_req_list == NULL) {
+    file->req_l = (struct netpipe_req_l *) malloc(sizeof(struct netpipe_req_l));
+    if (file->req_l == NULL) {
         free(file);
         return NULL;
     }
-    file->rd_req_list = (struct netpipe_req_l *) malloc(sizeof(struct netpipe_req_l));
-    if (file->rd_req_list == NULL) {
-        free(file->wr_req_list);
-        free(file);
-        return NULL;
-    }
-    (file->wr_req_list)->head = NULL;
-    (file->wr_req_list)->tail = NULL;
-    (file->rd_req_list)->head = NULL;
-    (file->rd_req_list)->tail = NULL;
+    (file->req_l)->head = NULL;
+    (file->req_l)->tail = NULL;
     file->path = strdup(path);
     if (file->path == NULL) {
-        free(file->wr_req_list);
-        free(file->rd_req_list);
+        free(file->req_l);
         free(file);
         return NULL;
     }
@@ -111,8 +99,7 @@ struct netpipe *netpipe_alloc(const char *path) {
     if ((err = pthread_mutex_init(&(file->mtx), NULL) != 0)) {
         errno = err;
         free((void*) file->path);
-        free(file->wr_req_list);
-        free(file->rd_req_list);
+        free(file->req_l);
         free(file);
         return NULL;
     }
@@ -146,8 +133,7 @@ struct netpipe *netpipe_alloc(const char *path) {
     return file;
 
 error:
-    free(file->wr_req_list);
-    free(file->rd_req_list);
+    free(file->req_l);
     free((void*) file->path);
     pthread_mutex_destroy(&(file->mtx));
     free(file);
@@ -169,28 +155,16 @@ int netpipe_free(struct netpipe *file, void (*poll_destroy)(void *)) {
         free(oldph);
     }
 
-    /* free pending read requests */
-    netpipe_req_t *req = (file->rd_req_list)->head;
+    /* free pending requests */
+    netpipe_req_t *req = (file->req_l)->head;
     netpipe_req_t *oldreq;
     while(req != NULL) {
         oldreq = req;
         req = req->next;
         if (netpipe_destroy_request(oldreq) == -1) ret = -1;
     }
-    file->rd_req_list->head = NULL;
-    file->rd_req_list->tail = NULL;
-    free(file->rd_req_list);
-
-    /* free pending write requests */
-    req = file->wr_req_list->head;
-    while(req != NULL) {
-        oldreq = req;
-        req = req->next;
-        if (netpipe_destroy_request(oldreq) == -1) ret = -1;
-    }
-    file->wr_req_list->head = NULL;
-    file->wr_req_list->tail = NULL;
-    free(file->wr_req_list);
+    file->req_l->head = NULL;
+    free(file->req_l);
 
     if ((err = pthread_cond_destroy(&(file->canopen))) != 0) { errno = err; ret = -1; }
     if ((err = pthread_cond_destroy(&(file->close))) != 0) { errno = err; ret = -1; }
@@ -477,10 +451,9 @@ int netpipe_recv(struct netpipe *file, size_t size, void (*poll_notify)(void *))
 
     NOTZERO(netpipe_lock(file), return -1)
 
-    req_list = file->rd_req_list;
-    req = req_list->head;
-
     // Move data from buffer to pending requests
+    req_list = file->req_l;
+    req = req_list->head;
     while(req != NULL && !cbuf_empty(file->buffer)) {
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
@@ -637,7 +610,7 @@ static size_t send_data(struct netpipe *file) {
 
     // If host can still receive data
     // Handle requests: send data from pending requests
-    req_list = file->wr_req_list;
+    req_list = file->req_l;
     req = req_list->head;
     while(available_remote(file) > 0 && req != NULL) {
         bufptr = req->buf + req->bytes_processed;
@@ -844,28 +817,28 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
     if (mode == O_WRONLY) {
         file->writers--;
         if (file->writers == 0) {
-            req = (file->rd_req_list)->head;
+            req = (file->req_l)->head;
             while(req != NULL) { // set error = EPIPE to all write requests
                 req->error = EPIPE;
                 PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
                 req = req->next;
             }
-            (file->rd_req_list)->head = NULL;
-            (file->rd_req_list)->tail = NULL;
+            (file->req_l)->head = NULL;
+            (file->req_l)->tail = NULL;
         }
     } else if (mode == O_RDONLY) {
         file->readers--;
         if (file->readers == 0) {
             file->remotesize = 0;
             file->remotemax = netpipefs_socket.remotepipecapacity;
-            req = (file->wr_req_list)->head;
+            req = (file->req_l)->head;
             while(req != NULL) { // set error = EPIPE to all read requests
                 req->error = EPIPE;
                 PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
                 req = req->next;
             }
-            (file->wr_req_list)->head = NULL;
-            (file->wr_req_list)->tail = NULL;
+            (file->req_l)->head = NULL;
+            (file->req_l)->tail = NULL;
         }
     }
 
@@ -897,13 +870,8 @@ int netpipe_force_exit(struct netpipe *file, void (*poll_notify)(void *)) {
     PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipe_unlock(file); return -1)
     PTH(err, pthread_cond_broadcast(&(file->close)), netpipe_unlock(file); return -1)
 
-    req = (file->wr_req_list)->head;
+    req = (file->req_l)->head;
     while(req != NULL) { // set error = EPIPE to all write requests
-        PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
-        req = req->next;
-    }
-    req = (file->rd_req_list)->head;
-    while(req != NULL) { // set error = EPIPE to all read requests
         PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
         req = req->next;
     }
