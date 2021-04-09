@@ -47,7 +47,8 @@ To run the test suite first build the tests by running ``make test`` and finally
 | `--hostip=IP` | Host IP address. If "localhost" then AF_UNIX sockets are used |
 | `--hostport=PORT` | Port used by host |
 | `--timeout=MILLISECONDS` | Connection timeout. Expressed in milliseconds |
-| `--pipecapaciy=CAPACITY` | Maximum network pipe size |
+| `--writeahead=N` | How many bytes can be bufferized on write requests if the remote host can't receive data |
+| `--readahead=N` | How many bytes can be received and put into the buffer to anticipate read requests |
 | `-f` | Do not daemonize, stay in foreground |
 | `-s` | Single threaded operation |
 | `-delayconnect` | Connect to host after the filesystem is mounted |

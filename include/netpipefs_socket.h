@@ -13,7 +13,7 @@
 struct netpipefs_socket {
     int fd;     // socket file descriptor
     pthread_mutex_t wr_mtx; // protect write
-    size_t remotepipecapacity;
+    size_t remote_readahead;
 };
 
 /** Header sent before each message */

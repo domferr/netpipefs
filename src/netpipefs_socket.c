@@ -159,12 +159,12 @@ int establish_socket_connection(struct netpipefs_socket *netpipefs_socket, long 
         goto error;
     }
 
-    /* send local pipe capacity */
-    err = writen(netpipefs_socket->fd, &netpipefs_options.pipecapacity, sizeof(size_t));
+    /* send local readahead value */
+    err = writen(netpipefs_socket->fd, &netpipefs_options.readahead, sizeof(size_t));
     if (err <= 0) goto error;
 
-    /* read remote pipe capacity */
-    err = readn(netpipefs_socket->fd, &netpipefs_socket->remotepipecapacity, sizeof(size_t));
+    /* read remote readahead value */
+    err = readn(netpipefs_socket->fd, &netpipefs_socket->remote_readahead, sizeof(size_t));
     if (err <= 0) goto error;
 
     free(host_received);

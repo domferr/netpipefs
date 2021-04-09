@@ -16,7 +16,8 @@
         }               \
     } while(0)
 
-#define DEFAULT_PIPE_CAPACITY 4096
+#define DEFAULT_READAHEAD 4096
+#define DEFAULT_WRITEAHEAD 4096
 
 /** Structure for a file in netpipefs */
 struct netpipe {

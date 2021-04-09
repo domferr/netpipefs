@@ -58,8 +58,9 @@ static void* init_callback(struct fuse_conn_info *conn) {
     DEBUG("connection established: %s\n", (strcmp(netpipefs_options.hostip, "localhost") == 0 ? AF_UNIX_LABEL:AF_INET_LABEL));
     DEBUG("host=%s:%d\n", netpipefs_options.hostip, netpipefs_options.hostport);
     DEBUG("local port=%d\n", netpipefs_options.port);
-    DEBUG("local pipe capacity=%ld\n", netpipefs_options.pipecapacity);
-    DEBUG("host pipe capacity=%ld\n", netpipefs_socket.remotepipecapacity);
+    DEBUG("max readahead=%ld\n", netpipefs_options.readahead);
+    DEBUG("max writeahead=%ld\n", netpipefs_options.writeahead);
+    DEBUG("host max readahead=%ld\n", netpipefs_socket.remote_readahead);
 
     return 0;
 }

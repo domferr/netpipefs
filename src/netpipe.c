@@ -115,18 +115,12 @@ struct netpipe *netpipe_alloc(const char *path) {
         goto error;
     }
 
-    file->buffer = cbuf_alloc(netpipefs_options.pipecapacity);
-    if (file->buffer == NULL) {
-        pthread_cond_destroy(&(file->canopen));
-        pthread_cond_destroy(&(file->close));
-        goto error;
-    }
-
+    file->buffer = NULL;
     file->open_mode = NOT_OPEN;
     file->force_exit = 0;
     file->writers = 0;
     file->readers = 0;
-    file->remotemax = netpipefs_socket.remotepipecapacity;
+    file->remotemax = netpipefs_socket.remote_readahead;
     file->remotesize = 0;
     file->poll_handles = NULL;
 
@@ -189,6 +183,7 @@ int netpipe_unlock(struct netpipe *file) {
 
 int netpipe_open(struct netpipe *file, int mode, int nonblock) {
     int err, bytes;
+    size_t buffer_capacity;
 
     /* both read and write access is not allowed */
     if (mode == O_RDWR) {
@@ -236,6 +231,11 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
         errno = ENOENT;
         goto undo_open;
     }
+
+    /* Alloc buffer */
+    buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead:netpipefs_options.readahead;
+    file->buffer = cbuf_alloc(buffer_capacity);
+    if (file->buffer == NULL) goto undo_open;
 
     NOTZERO(netpipe_unlock(file), goto undo_open)
 
@@ -680,8 +680,8 @@ int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(v
     NOTZERO(netpipe_lock(file), return -1)
 
     file->remotemax -= size;
-    if (file->remotemax < netpipefs_socket.remotepipecapacity)
-        file->remotemax = netpipefs_socket.remotepipecapacity;
+    if (file->remotemax < netpipefs_socket.remote_readahead)
+        file->remotemax = netpipefs_socket.remote_readahead;
     file->remotesize -= size;
 
     err = send_data(file);
@@ -830,7 +830,7 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
         file->readers--;
         if (file->readers == 0) {
             file->remotesize = 0;
-            file->remotemax = netpipefs_socket.remotepipecapacity;
+            file->remotemax = netpipefs_socket.remote_readahead;
             req = (file->req_l)->head;
             while(req != NULL) { // set error = EPIPE to all read requests
                 req->error = EPIPE;

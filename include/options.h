@@ -20,8 +20,8 @@ struct netpipefs_options {
     char *hostip;
     int hostport;
     int delayconnect;
-    size_t pipecapacity;
-    int writeahead;
+    size_t writeahead;
+    size_t readahead;
     /*int intr;
     int intr_signal;*/
 };

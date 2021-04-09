@@ -33,8 +33,10 @@ cbuf_t *cbuf_alloc(size_t capacity) {
 }
 
 void cbuf_free(cbuf_t *cbuf) {
-    free(cbuf->data);
-    free(cbuf);
+    if (cbuf) {
+        free(cbuf->data);
+        free(cbuf);
+    }
 }
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
