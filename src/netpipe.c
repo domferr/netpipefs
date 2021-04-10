@@ -37,6 +37,9 @@ typedef struct netpipe_req_l {
     netpipe_req_t *tail;   // last request
 } netpipe_req_l;
 
+/** Loop for each request */
+#define foreach_request(file, req) for((req) = ((file)->req_l)->head; (req) != NULL; (req) = (req)->next)
+
 /**
  * Add a new read or write request to the given file.
  *
@@ -817,11 +820,9 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
     if (mode == O_WRONLY) {
         file->writers--;
         if (file->writers == 0) {
-            req = (file->req_l)->head;
-            while(req != NULL) { // set error = EPIPE to all write requests
+            foreach_request(file, req) { // set error = EPIPE to all write requests
                 req->error = EPIPE;
                 PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
-                req = req->next;
             }
             (file->req_l)->head = NULL;
             (file->req_l)->tail = NULL;
@@ -831,11 +832,9 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
         if (file->readers == 0) {
             file->remotesize = 0;
             file->remotemax = netpipefs_socket.remote_readahead;
-            req = (file->req_l)->head;
-            while(req != NULL) { // set error = EPIPE to all read requests
+            foreach_request(file, req) { // set error = EPIPE to all write requests
                 req->error = EPIPE;
                 PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
-                req = req->next;
             }
             (file->req_l)->head = NULL;
             (file->req_l)->tail = NULL;
@@ -870,10 +869,8 @@ int netpipe_force_exit(struct netpipe *file, void (*poll_notify)(void *)) {
     PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipe_unlock(file); return -1)
     PTH(err, pthread_cond_broadcast(&(file->close)), netpipe_unlock(file); return -1)
 
-    req = (file->req_l)->head;
-    while(req != NULL) { // set error = EPIPE to all write requests
+    foreach_request(file, req) { // set error = EPIPE to all write requests
         PTH(err, pthread_cond_signal(&(req->waiting)), netpipe_unlock(file); return -1)
-        req = req->next;
     }
     if (poll_notify) loop_poll_notify(file, poll_notify);
 
