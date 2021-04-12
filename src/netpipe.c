@@ -322,7 +322,9 @@ static int do_flush(struct netpipe *file, size_t *bytes_sent) {
     int bytes;
     size_t available_locally;
 
+    DEBUG("before cbuf_size\n");
     available_locally = cbuf_size(file->buffer);
+    DEBUG("after cbuf_size: %ld\n", available_locally);
     *bytes_sent = available_locally < available_remote(file) ? available_locally : available_remote(file);
     if (*bytes_sent == 0) return 1;
 
@@ -612,7 +614,7 @@ static size_t send_data(struct netpipe *file) {
     char *bufptr;
 
     // Flush buffer: send data from buffer
-    DEBUG("before do_flush\n");
+    DEBUG("before do_flush. buffer is NULL %d\n", (file->buffer == NULL));
     err = do_flush(file, &bytes);
     if (err <= 0) return -1;
 
