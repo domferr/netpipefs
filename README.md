@@ -23,7 +23,7 @@ On BSD and macOS, to unmount the filesystem:
 
 NetpipeFS can also be run with valgrind to check for memory leaks:
 
-    valgrind --sim-hints=fuse-compatible netpipefs --port=[local_port] --host=[hostip] --hostport=[hostport] mountpoint
+    valgrind --sim-hints=fuse-compatible netpipefs --port=[local_port] --hostip=[hostip] --hostport=[hostport] mountpoint
 
 To check if the filesystem is mounted:
 
