@@ -12,8 +12,6 @@ static void test_openfiles_table(void);
 
 int main(int argc, char** argv) {
     netpipefs_options.debug = 0; // disable debug printings
-    netpipefs_options.pipecapacity = 1024;
-    netpipefs_socket.remotepipecapacity = 512;
 
     test_uninitialized_table();
     test_openfiles_table();
