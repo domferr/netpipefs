@@ -237,7 +237,6 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
     /* Alloc buffer */
     buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead : netpipefs_options.readahead;
     if (cbuf_capacity(file->buffer) == 0 && buffer_capacity > 0) {
-        DEBUG("alloc buffer with capacity %ld\n", buffer_capacity);
         cbuf_free(file->buffer);
         file->buffer = cbuf_alloc(buffer_capacity);
         if (file->buffer == NULL) goto undo_open;
@@ -324,9 +323,7 @@ static int do_flush(struct netpipe *file, size_t *bytes_sent) {
     int bytes;
     size_t available_locally;
 
-    DEBUG("before cbuf_size\n");
     available_locally = cbuf_size(file->buffer);
-    DEBUG("after cbuf_size: %ld\n", available_locally);
     *bytes_sent = available_locally < available_remote(file) ? available_locally : available_remote(file);
     if (*bytes_sent == 0) return 1;
 
@@ -616,7 +613,6 @@ static size_t send_data(struct netpipe *file) {
     char *bufptr;
 
     // Flush buffer: send data from buffer
-    DEBUG("before do_flush. buffer is NULL %d\n", (file->buffer == NULL));
     err = do_flush(file, &bytes);
     if (err <= 0) return -1;
 
@@ -631,7 +627,6 @@ static size_t send_data(struct netpipe *file) {
     req_list = file->req_l;
     req = req_list->head;
     while(available_remote(file) > 0 && req != NULL) {
-        DEBUG("loop available_remote(file) > 0 && req != NULL\n");
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
 
@@ -659,7 +654,6 @@ static size_t send_data(struct netpipe *file) {
     // If there are pending requests and there is space into the buffer
     // Put data from requests into the buffer (Writeahead)
     while(req != NULL && !cbuf_full(file->buffer) && cbuf_capacity(file->buffer) > 0) {
-        DEBUG("loop req != NULL && !cbuf_full(file->buffer) && cbuf_capacity(file->buffer) > 0\n");
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
 
@@ -689,7 +683,6 @@ int netpipe_read_request(struct netpipe *file, size_t size, void (*poll_notify)(
     err = send_data(file);
     if (err > 0 && poll_notify) loop_poll_notify(file, poll_notify);
 
-    DEBUG("after send_data in netpipe_read_request()\n");
     DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), return -1)
