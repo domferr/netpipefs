@@ -118,7 +118,7 @@ struct netpipe *netpipe_alloc(const char *path) {
         goto error;
     }
 
-    file->buffer = NULL;
+    file->buffer = cbuf_alloc(0);
     file->open_mode = NOT_OPEN;
     file->force_exit = 0;
     file->writers = 0;
@@ -235,9 +235,10 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
     }
 
     /* Alloc buffer */
-    if (file->buffer == NULL) {
-        buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead : netpipefs_options.readahead;
+    buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead : netpipefs_options.readahead;
+    if (cbuf_capacity(file->buffer) == 0 && buffer_capacity > 0) {
         DEBUG("alloc buffer with capacity %ld\n", buffer_capacity);
+        cbuf_free(file->buffer);
         file->buffer = cbuf_alloc(buffer_capacity);
         if (file->buffer == NULL) goto undo_open;
     }
