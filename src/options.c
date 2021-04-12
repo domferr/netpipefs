@@ -25,8 +25,8 @@ static const struct fuse_opt netpipefs_opts[] = {
         NETPIPEFS_OPT("--timeout=%i",       timeout, 0),
         NETPIPEFS_OPT("--hostip=%s",        hostip, 0),
         NETPIPEFS_OPT("--hostport=%i",      hostport, 0),
-        NETPIPEFS_OPT("--writeahead=%i",      writeahead, 0),
-        NETPIPEFS_OPT("--readahead=%i",      writeahead, 0),
+        NETPIPEFS_OPT("--writeahead=%i",    writeahead, 0),
+        NETPIPEFS_OPT("--readahead=%i",     readahead, 0),
         NETPIPEFS_OPT("-delayconnect",      delayconnect, 1),
 
         FUSE_OPT_END
