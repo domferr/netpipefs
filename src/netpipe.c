@@ -214,7 +214,6 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
         errno = EAGAIN;
         goto undo_open;
     }
-    DEBUGFILE(file);
 
     /* Notify who's waiting for readers/writers */
     PTH(err, pthread_cond_broadcast(&(file->canopen)), goto undo_open)
@@ -236,9 +235,13 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
     }
 
     /* Alloc buffer */
-    buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead:netpipefs_options.readahead;
-    file->buffer = cbuf_alloc(buffer_capacity);
-    if (file->buffer == NULL) goto undo_open;
+    if (file->buffer == NULL) {
+        buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead : netpipefs_options.readahead;
+        file->buffer = cbuf_alloc(buffer_capacity);
+        if (file->buffer == NULL) goto undo_open;
+    }
+
+    DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), goto undo_open)
 
@@ -268,7 +271,9 @@ int netpipe_open_update(struct netpipe *file, int mode) {
 
     if (mode == O_RDONLY) file->readers++;
     else if (mode == O_WRONLY) file->writers++;
+
     DEBUGFILE(file);
+
     PTH(err, pthread_cond_broadcast(&(file->canopen)), netpipe_unlock(file); goto undo_open)
 
     NOTZERO(netpipe_unlock(file), goto undo_open)
@@ -373,7 +378,6 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     size_t sent = 0, bytes, remaining;
 
     NOTZERO(netpipe_lock(file), return -1)
-    DEBUGFILE(file);
 
     if (file->force_exit || file->readers == 0) {
         errno = EPIPE;
@@ -438,7 +442,9 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     }
 
     if (netpipe_destroy_request(request) && sent == 0)
-        return -1;
+        sent = -1;
+    else
+        DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
     return sent;
@@ -518,8 +524,8 @@ int netpipe_recv(struct netpipe *file, size_t size, void (*poll_notify)(void *))
         DEBUG("readahead[%s] %ld bytes\n", file->path, bytes);
     }
 
-    DEBUGFILE(file);
     if (poll_notify) loop_poll_notify(file, poll_notify);
+    DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), return -1)
 
@@ -582,7 +588,9 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
     }
 
     if (netpipe_destroy_request(request) && read == 0)
-        return -1;
+        read = -1;
+
+    DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
     return read;
@@ -672,6 +680,8 @@ int netpipe_read_request(struct netpipe *file, size_t size, void (*poll_notify)(
     err = send_data(file);
     if (err > 0 && poll_notify) loop_poll_notify(file, poll_notify);
 
+    DEBUGFILE(file);
+
     NOTZERO(netpipe_unlock(file), return -1)
 
     return err;
@@ -689,6 +699,8 @@ int netpipe_read_update(struct netpipe *file, size_t size, void (*poll_notify)(v
 
     err = send_data(file);
     if (err > 0 && poll_notify) loop_poll_notify(file, poll_notify);
+
+    DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), return -1)
 
@@ -730,7 +742,6 @@ ssize_t netpipe_flush(struct netpipe *file, int nonblock) {
         PTH(err, pthread_cond_wait(&(file->close), &(file->mtx)), netpipe_unlock(file); return -1)
     }
 
-    DEBUG("after flush ");
     DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
@@ -769,6 +780,7 @@ int netpipe_poll(struct netpipe *file, void *ph, unsigned int *reventsp) {
         }
     }
 
+    DEBUGFILE(file);
     MINUS1(netpipe_unlock(file), return -1)
 
     return 0;
@@ -792,12 +804,12 @@ int netpipe_close(struct netpipe *file, int mode, int (*remove_open_file)(const 
         file->readers--;
     }
 
-    DEBUGFILE(file);
     if (poll_notify) loop_poll_notify(file, poll_notify);
 
     bytes = send_close_message(&netpipefs_socket, file->path, mode);
     if (bytes <= 0) err = -1;
 
+    DEBUGFILE(file);
     if (file->writers == 0 && file->readers == 0 && available_remote(file) == 0) {
         if (remove_open_file) MINUS1(remove_open_file(file->path), err = -1)
         NOTZERO(netpipe_unlock(file), err = -1)
@@ -841,9 +853,8 @@ int netpipe_close_update(struct netpipe *file, int mode, int (*remove_open_file)
         }
     }
 
-    DEBUGFILE(file);
-
     if (poll_notify) loop_poll_notify(file, poll_notify);
+    DEBUGFILE(file);
 
     if (file->writers == 0 && file->readers == 0 && available_remote(file) == 0) {
         err = 0;
@@ -874,6 +885,7 @@ int netpipe_force_exit(struct netpipe *file, void (*poll_notify)(void *)) {
     }
     if (poll_notify) loop_poll_notify(file, poll_notify);
 
+    DEBUGFILE(file);
     MINUS1(netpipe_unlock(file), return -1)
 
     return 0;

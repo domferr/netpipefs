@@ -9,10 +9,15 @@
 #define DEBUGFILE(file) \
     do { if ((file)->open_mode == O_RDONLY) { \
             DEBUG("[%s] %d readers, %d writers, %ld/%ld local buffer\n", \
-            (file)->path, (file)->readers, (file)->writers, cbuf_size((file)->buffer), cbuf_capacity((file)->buffer)); \
+            (file)->path, (file)->readers, (file)->writers,              \
+            (file)->buffer == NULL ? 0:cbuf_size((file)->buffer),        \
+            (file)->buffer == NULL ? 0:cbuf_capacity((file)->buffer));   \
         } else {        \
             DEBUG("[%s] %d readers, %d writers, %ld/%ld local buffer, %ld/%ld remote bytes\n", \
-            (file)->path, (file)->readers, (file)->writers, cbuf_size((file)->buffer), cbuf_capacity((file)->buffer), (file)->remotesize, (file)->remotemax); \
+            (file)->path, (file)->readers, (file)->writers,              \
+            (file)->buffer == NULL ? 0:cbuf_size((file)->buffer),        \
+            (file)->buffer == NULL ? 0:cbuf_capacity((file)->buffer),    \
+            (file)->remotesize, (file)->remotemax); \
         }               \
     } while(0)
 
