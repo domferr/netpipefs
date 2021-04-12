@@ -255,6 +255,7 @@ undo_open:
         file->writers--;
         if (file->writers == 0) file->open_mode = NOT_OPEN; // revert to unopen
     }
+    netpipe_unlock(file);
 
     return -1;
 }
@@ -284,6 +285,7 @@ undo_open:
     if (mode == O_RDONLY) file->readers--;
     else if (mode == O_WRONLY) file->writers--;
 
+    netpipe_unlock(file);
     return -1;
 }
 
@@ -610,6 +612,7 @@ static size_t send_data(struct netpipe *file) {
     char *bufptr;
 
     // Flush buffer: send data from buffer
+    DEBUG("before do_flush\n");
     err = do_flush(file, &bytes);
     if (err <= 0) return -1;
 
@@ -624,6 +627,7 @@ static size_t send_data(struct netpipe *file) {
     req_list = file->req_l;
     req = req_list->head;
     while(available_remote(file) > 0 && req != NULL) {
+        DEBUG("loop available_remote(file) > 0 && req != NULL\n");
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
 
@@ -651,6 +655,7 @@ static size_t send_data(struct netpipe *file) {
     // If there are pending requests and there is space into the buffer
     // Put data from requests into the buffer (Writeahead)
     while(req != NULL && !cbuf_full(file->buffer) && cbuf_capacity(file->buffer) > 0) {
+        DEBUG("loop req != NULL && !cbuf_full(file->buffer) && cbuf_capacity(file->buffer) > 0\n");
         bufptr = req->buf + req->bytes_processed;
         remaining = req->size - req->bytes_processed;
 
@@ -680,6 +685,7 @@ int netpipe_read_request(struct netpipe *file, size_t size, void (*poll_notify)(
     err = send_data(file);
     if (err > 0 && poll_notify) loop_poll_notify(file, poll_notify);
 
+    DEBUG("after send_data in netpipe_read_request()\n");
     DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), return -1)
