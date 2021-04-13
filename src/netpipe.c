@@ -424,8 +424,6 @@ ssize_t netpipe_send(struct netpipe *file, const char *buf, size_t size, int non
     err = netpipe_destroy_request(request);
     if (err == -1 && sent == 0)
         sent = -1;
-    else
-        DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
     return sent;
@@ -568,7 +566,7 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
     read += request->bytes_processed;
     if (read == 0) {
         errno = EPIPE;
-        if (request->error && request->error != EPIPE || file->force_exit) {
+        if ((request->error && request->error != EPIPE) || file->force_exit) {
             errno = request->error;
             read = -1;
         }
@@ -577,8 +575,6 @@ ssize_t netpipe_read(struct netpipe *file, char *buf, size_t size, int nonblock)
     err = netpipe_destroy_request(request);
     if (err == -1 && read == 0)
         read = -1;
-    else
-        DEBUGFILE(file);
     NOTZERO(netpipe_unlock(file), return -1)
 
     return read;
@@ -751,11 +747,9 @@ int netpipe_close(struct netpipe *file, int mode, int (*remove_open_file)(const 
         if (!file->force_exit && file->writers == 0 && file->readers > 0 && !cbuf_empty(file->buffer)) {
             // Flush buffer: send data from buffer
             err = do_flush(file, &flushed);
-            if (err > 0) {
-                DEBUG("flush[%s] %ld bytes\n", file->path, flushed);
-                while(!file->force_exit && file->readers > 0 && !cbuf_empty(file->buffer)) {
-                    PTH(err, pthread_cond_wait(&(file->close), &(file->mtx)), netpipe_unlock(file); return -1)
-                }
+            if (err > 0) DEBUG("flush[%s] %ld bytes\n", file->path, flushed);
+            while(!file->force_exit && file->readers > 0 && !cbuf_empty(file->buffer)) {
+                PTH(err, pthread_cond_wait(&(file->close), &(file->mtx)), netpipe_unlock(file); return -1)
             }
         }
     } else if (mode == O_RDONLY) {
