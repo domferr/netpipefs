@@ -5,6 +5,9 @@
 #include "options.h"
 #include "cbuf.h"
 
+#define DEFAULT_READAHEAD 4096
+#define DEFAULT_WRITEAHEAD 4096
+
 /** Print debug info about the given file */
 #define DEBUGFILE(file) \
     do { if ((file)->open_mode == O_RDONLY) { \
@@ -21,8 +24,6 @@
         }               \
     } while(0)
 
-#define DEFAULT_READAHEAD 4096
-#define DEFAULT_WRITEAHEAD 4096
 
 /** Structure for a file in netpipefs */
 struct netpipe {
@@ -164,18 +165,6 @@ int netpipe_read_request(struct netpipe *file, size_t size, void (*poll_notify)(
  * @return
  */
 int netpipe_poll(struct netpipe *file, void *ph, unsigned int *reventsp);
-
-/**
- * Flush data. When nonblock is 1 then it will flush only the bytes that can be flushed
- * without blocking. If nonblock is 0 then it will block until all the bytes in the
- * local buffer can be flushed. If nonblock is 1 but the netpipe is empty then it
- * return -1 and errno is set to EAGAIN.
- *
- * @param file the file to be flushed
- * @param nonblock if 1 then this function will not block
- * @return how many bytes were flushed or 0 if connection was lost or -1 on error
- */
-ssize_t netpipe_flush(struct netpipe *file, int nonblock);
 
 /**
  * Closes the netpipe.
