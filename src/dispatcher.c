@@ -31,7 +31,7 @@ static int on_open(char *path) {
     struct netpipe *file = netpipefs_get_or_create_open_file(path, &just_created);
     if (file == NULL) return -1;
 
-    DEBUG("remote: OPEN %s %d\n", path, mode);
+    DEBUG("remote[%s] OPEN %d\n", path, mode);
     bytes = netpipe_open_update(file, mode);
     if (bytes == -1) {
         if (just_created) {
@@ -52,7 +52,7 @@ static int on_close(char *path) {
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
 
-    DEBUG("remote: CLOSE %s %d\n", path, mode);
+    DEBUG("remote[%s] CLOSE %d\n", path, mode);
     MINUS1(netpipe_close_update(file, mode, &netpipefs_remove_open_file, &netpipefs_poll_notify), return -1)
 
     return bytes; // > 0
@@ -79,7 +79,7 @@ static int on_write(char *path) {
         return -1;
     }
 
-    DEBUG("remote: WRITE %s %ld bytes DATA\n", path, size);
+    DEBUG("remote[%s] WRITE %ld bytes\n", path, size);
     bytes = netpipe_recv(file, size, &netpipefs_poll_notify);
     if (bytes <= 0) {
         if (errno == EPIPE) {
@@ -106,7 +106,7 @@ static int on_read(char *path) {
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
 
-    DEBUG("remote: READ %s %ld bytes\n", path, size);
+    DEBUG("remote[%s] READ %ld bytes\n", path, size);
     err = netpipe_read_update(file, size, &netpipefs_poll_notify);
     if (err == -1) return -1;
 
@@ -127,7 +127,7 @@ static int on_read_request(char *path) {
     struct netpipe *file = netpipefs_get_open_file(path);
     if (file == NULL) return -1;
 
-    DEBUG("remote: READ_REQUEST %s %ld bytes\n", path, size);
+    DEBUG("remote[%s] READ_REQUEST %ld bytes\n", path, size);
     err = netpipe_read_request(file, size, &netpipefs_poll_notify);
     if (err == -1) return -1;
 
@@ -155,7 +155,7 @@ static void *netpipefs_dispatcher_fun(void *unused) {
             enum netpipefs_header header;
             char *path = NULL;
             if ((bytes = read_socket_header(&netpipefs_socket, &header, &path)) == -1) {
-                perror("dispatcher - failed to read socket message");
+                perror("dispatcher. failed to read socket message");
             } else if (bytes > 0) {
                 switch (header) {
                     case OPEN:
