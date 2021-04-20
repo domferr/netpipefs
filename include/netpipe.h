@@ -5,8 +5,8 @@
 #include "options.h"
 #include "cbuf.h"
 
-#define DEFAULT_READAHEAD 4096
-#define DEFAULT_WRITEAHEAD 4096
+#define DEFAULT_READAHEAD 0
+#define DEFAULT_WRITEAHEAD 0
 
 /** Print debug info about the given file */
 #define DEBUGFILE(file) \
