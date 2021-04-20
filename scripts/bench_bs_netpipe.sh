@@ -19,6 +19,7 @@ do
   printf "\rRunning benchmark: bs=%d count=%d %d%c" $OBS $COUNT $((($i*100)/$ITER)) '%'
 
   dd if=/dev/zero of=./tmp/prod/bench bs=$OBS count=$COUNT 2>&1 | grep copied >> $BENCH_WRITE_FILE &
+  # sleep 1
   dd if=./tmp/cons/bench bs=$IBS 2>&1 | grep -a copied >> $BENCH_READ_FILE
   wait
 

@@ -211,11 +211,13 @@ static void *consumer(void *arg) {
         if (err == 0) {
             errno = ETIMEDOUT;
         } else if (err > 0) {
+            printf("cons wokeup");
             // Read from readable netpipes
             for(i=0; i < num_netpipes; i++) {
                 if (FD_ISSET(fd[i], &rset)) {
                     err = readn(fd[i], buf, in_blocksize);
                     if (i == 0 && err > 0) bytes_read += err;
+                    printf(" %d, %d", fd[i], err);
                     if (err == 0) {
                         close(fd[i]);
                         fd[i] = -1;
@@ -235,6 +237,7 @@ static void *consumer(void *arg) {
                     }
                 }
             }
+            printf("\n");
         }
     }
 
@@ -349,13 +352,16 @@ int main(int argc, char** argv) {
         if (err == 0) {
             errno = ETIMEDOUT;
         } else if (err > 0) {
+            //printf("prod wokeup");
             // Write to writable netpipes
             for(i=0; i < num_netpipes; i++) {
                 if (FD_ISSET(fd[i], &wset)) {
                     err = writen(fd[i], buf, out_blocksize);
                     if (err > 0) sent[i]++;
+                    //printf(" %d, %d", fd[i], sent[i]);
                 }
             }
+            //printf("\n");
         }
     }
 

@@ -23,14 +23,16 @@ do
   j=0
   while [ $j -lt $CONSUMERS ]
   do
-    dd if=./tmp/cons/bench bs=$IBS 2>&1 | grep -a copied >> $BENCH_READ_FILE &
+    currbs=$(($IBS/$CONSUMERS))
+    dd if=./tmp/cons/bench bs=$currbs 2>&1 | grep -a copied >> $BENCH_READ_FILE &
     j=$(( $j + 1 ))
   done
 
   j=0
   while [ $j -lt $PRODUCERS ]
   do
-    dd if=/dev/zero of=./tmp/prod/bench bs=$OBS count=$COUNT 2>&1 | grep copied >> $BENCH_WRITE_FILE &
+    currbs=$(($OBS/$PRODUCERS))
+    dd if=/dev/zero of=./tmp/prod/bench bs=$currbs count=$COUNT 2>&1 | grep copied >> $BENCH_WRITE_FILE &
     j=$(( $j + 1 ))
   done
 
