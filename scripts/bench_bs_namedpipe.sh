@@ -44,7 +44,7 @@ fi
 while [ $bs -le $MAXBS ]
 do
 
-  printf "\rRunning benchmark with %d readers and %d writers: bs=%d count=%d" $readers $writers $bs $COUNT
+  printf "\rRunning benchmark with %d readers and %d writers, bs=%d, count=%d" $readers $writers $bs $COUNT
 
   # run all the writers
   for (( i = 0; i < writers; i++ )); do

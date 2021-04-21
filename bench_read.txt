@@ -1,0 +1,8 @@
+1024 bytes (1.0 kB, 1.0 KiB) copied, 0.0003725 s, 2.7 MB/s
+2048 bytes (2.0 kB, 2.0 KiB) copied, 0.0005854 s, 3.5 MB/s
+4096 bytes (4.1 kB, 4.0 KiB) copied, 0.0007163 s, 5.7 MB/s
+8192 bytes (8.2 kB, 8.0 KiB) copied, 0.0007667 s, 10.7 MB/s
+16384 bytes (16 kB, 16 KiB) copied, 0.0005009 s, 32.7 MB/s
+32768 bytes (33 kB, 32 KiB) copied, 0.0004223 s, 77.6 MB/s
+65536 bytes (66 kB, 64 KiB) copied, 0.0004555 s, 144 MB/s
+131072 bytes (131 kB, 128 KiB) copied, 0.000694 s, 189 MB/s

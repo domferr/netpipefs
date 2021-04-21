@@ -27,7 +27,7 @@ MAXBS=$(< ./tmp/cons/maxbs)
 while [ $ibs -le $MAXBS ]
 do
 
-  printf "\rRunning benchmark with %d readers: bs=%d count=%d %d%c" $readers $ibs $COUNT $(($ibs/$MAXBS)) '%'
+  printf "\rRunning benchmark with %d readers, bs=%d, count=%d" $readers $ibs $COUNT
 
   # run all the readers
   for (( i = 0; i < readers; i++ )); do
