@@ -2,7 +2,7 @@
 # Runs a benchmark which increases block size until 4gb. Count will always be 1
 #
 
-BENCH_WRITE_FILE=bench-write.txt  # benchmark file where to print write results
+BENCH_WRITE_FILE=bench_write.txt  # benchmark file where to print write results
 > $BENCH_WRITE_FILE
 
 COUNT=1   # how many times should write

@@ -1,7 +1,7 @@
 #
 # Runs a benchmark which increases block size. Count will always be 1
 #
-BENCH_READ_FILE=bench-read.txt    # benchmark file where to print read results
+BENCH_READ_FILE=bench_read.txt # benchmark file where to print read results
 > $BENCH_READ_FILE
 
 COUNT=1   # how many times should read

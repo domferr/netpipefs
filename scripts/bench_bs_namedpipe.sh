@@ -1,14 +1,14 @@
 #
 # Runs a benchmark which increases block size until 4gb. Count will always be 1
 #
-
-BENCH_READ_FILE=bench-read.txt    # benchmark file where to print read results
+BENCH_READ_FILE=bench_read.txt    # benchmark file where to print read results
 > $BENCH_READ_FILE
-BENCH_WRITE_FILE=bench-write.txt  # benchmark file where to print write results
+
+BENCH_WRITE_FILE=bench_write.txt  # benchmark file where to print write results
 > $BENCH_WRITE_FILE
 
-COUNT=1   # how many times should write
-bs=1024  # write blocksize
+COUNT=1   # how many times should write/read
+bs=1024   # read/write blocksize
 MAXBS=$((2**31))   # max block size
 
 if [ $# -lt 2 ]; then
