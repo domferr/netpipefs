@@ -1,5 +1,5 @@
 remoteport=12345
-MAXBS=524288
+MAXBS=$((2**17))
 bs=8
 while [ $bs -le $MAXBS ]
 do
