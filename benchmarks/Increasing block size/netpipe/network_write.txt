@@ -1,0 +1,16 @@
+Running benchmark with 1 writers, bs=1024, count=1: .130639226s, 0 Gbit/s, .0068 MB/s
+Running benchmark with 1 writers, bs=2048, count=1: .133208444s, .0001 Gbit/s, .0142 MB/s
+Running benchmark with 1 writers, bs=4096, count=1: .132456522s, .0002 Gbit/s, .0294 MB/s
+Running benchmark with 1 writers, bs=8192, count=1: .133211680s, .0004 Gbit/s, .0585 MB/s
+Running benchmark with 1 writers, bs=16384, count=1: .130295194s, .0009 Gbit/s, .1197 MB/s
+Running benchmark with 1 writers, bs=32768, count=1: .133339012s, .0018 Gbit/s, .2339 MB/s
+Running benchmark with 1 writers, bs=65536, count=1: .133481125s, .0036 Gbit/s, .4682 MB/s
+Running benchmark with 1 writers, bs=131072, count=1: .177131000s, .0055 Gbit/s, .7056 MB/s
+Running benchmark with 1 writers, bs=262144, count=1: .221089890s, .0088 Gbit/s, 1.1307 MB/s
+Running benchmark with 1 writers, bs=524288, count=1: .304297191s, .0128 Gbit/s, 1.6431 MB/s
+Running benchmark with 1 writers, bs=1048576, count=1: .476792263s, .0163 Gbit/s, 2.0973 MB/s
+Running benchmark with 1 writers, bs=2097152, count=1: .824285625s, .0189 Gbit/s, 2.4263 MB/s
+Running benchmark with 1 writers, bs=4194304, count=1: 1.500415647s, .0208 Gbit/s, 2.6659 MB/s
+Running benchmark with 1 writers, bs=8388608, count=1: 2.872611032s, .0217 Gbit/s, 2.7849 MB/s
+Running benchmark with 1 writers, bs=16777216, count=1: 5.715570495s, .0218 Gbit/s, 2.7993 MB/s
+Running benchmark with 1 writers, bs=33554432, count=1: 11.268836950s, .0221 Gbit/s, 2.8396 MB/s
