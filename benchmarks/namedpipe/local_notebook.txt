@@ -1,0 +1,51 @@
+Block size=1024 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 11.6518 s, 5.8 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 11.6518 s, 5.8 MB/s
+Block size=2048 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 6.31128 s, 10.6 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 6.31134 s, 10.6 MB/s
+Block size=4096 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 3.19993 s, 21.0 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 3.19991 s, 21.0 MB/s
+Block size=8192 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 1.67223 s, 40.1 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 1.67224 s, 40.1 MB/s
+Block size=16384 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.855174 s, 78.5 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.85516 s, 78.5 MB/s
+Block size=32768 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.452841 s, 148 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.452831 s, 148 MB/s
+Block size=65536 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.423832 s, 158 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.423739 s, 158 MB/s
+Block size=131072 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.36988 s, 181 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.369874 s, 181 MB/s
+Block size=262144 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.322193 s, 208 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.322233 s, 208 MB/s
+Block size=524288 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.317893 s, 211 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.317882 s, 211 MB/s
+Block size=1048576 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.315748 s, 213 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.315748 s, 213 MB/s
+Block size=2097152 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.327389 s, 205 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.327452 s, 205 MB/s
+Block size=4194304 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.333462 s, 201 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.333455 s, 201 MB/s
+Block size=8388608 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.336464 s, 199 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.33648 s, 199 MB/s
+Block size=16777216 bytes
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.321098 s, 209 MB/s
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.321138 s, 209 MB/s
+Block size=33554432 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.283323 s, 237 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.283277 s, 237 MB/s
+Block size=67108864 bytes
+[Write] 67108864 bytes (67 MB, 64 MiB) copied, 0.30266 s, 222 MB/s
+[Read ] 67108864 bytes (67 MB, 64 MiB) copied, 0.302655 s, 222 MB/s
