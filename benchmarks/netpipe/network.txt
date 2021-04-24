@@ -1,0 +1,35 @@
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.308864 s, 6.8 MB/s
+bs=2097152, .318128562s, .0491 Gbit/s, 6.2867 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.309181 s, 6.8 MB/s
+bs=1048576, .317910024s, .0491 Gbit/s, 6.2910 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.309281 s, 6.8 MB/s
+bs=524288, .318392999s, .0490 Gbit/s, 6.2815 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.309232 s, 6.8 MB/s
+bs=262144, .317873789s, .0491 Gbit/s, 6.2918 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.309025 s, 6.8 MB/s
+bs=131072, .318059427s, .0491 Gbit/s, 6.2881 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.181453 s, 11.6 MB/s
+bs=65536, .190863761s, .0818 Gbit/s, 10.4786 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0978157 s, 21.4 MB/s
+bs=32768, .146233172s, .1068 Gbit/s, 13.6767 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.101487 s, 20.7 MB/s
+bs=16384, .110836451s, .1409 Gbit/s, 18.0446 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0992432 s, 21.1 MB/s
+bs=8192, .107913319s, .1447 Gbit/s, 18.5333 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.100308 s, 20.9 MB/s
+bs=4096, .108394460s, .1441 Gbit/s, 18.4511 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0288738 s, 72.6 MB/s
+bs=2048, .035273114s, .4429 Gbit/s, 56.7004 MB/s
+
+2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0600627 s, 34.9 MB/s
+bs=1024, .066895600s, .2335 Gbit/s, 29.8973 MB/s

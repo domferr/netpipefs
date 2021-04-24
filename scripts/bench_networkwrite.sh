@@ -17,7 +17,8 @@ if [ -p $if ]; then
     > $if > $if # empty out if it already exists
 fi
 # generate file with maxbs bytes
-dd if=/dev/zero of=$if bs=$maxbs count=1 2> /dev/null
+echo "$if created"
+dd if=/dev/zero of=$if bs=$maxbs count=1 2>&1 | grep copied
 
 # send max block
 echo $maxbs > ./tmp/prod/maxbs
@@ -29,20 +30,22 @@ do
   start_time="$(date -u +%s.%N)"
 
   # write
-  dd if=$if of=./tmp/prod/bench bs=$obs 2>&1 | grep copied > /dev/null
+  dd if=$if of=./tmp/prod/bench bs=$obs 2>&1 | grep copied
 
   # wait for the reader to complete
-  cat $syncpipe > /dev/null
+  nc -l 8787 > /dev/null
 
   end_time="$(date -u +%s.%N)"
 
   elapsed="$(bc <<<"$end_time-$start_time")"
-  gigabitpersec="$(bc <<<"scale=4; $obs * 8 / $elapsed / $((2**30))")"
-  megabytepersec="$(bc <<<"scale=4; $obs / $((2**20)) / $elapsed")"
+  gigabitpersec="$(bc <<<"scale=4; $maxbs * 8 / $elapsed / $((2**30))")"
+  megabytepersec="$(bc <<<"scale=4; $maxbs / $((2**20)) / $elapsed")"
   printf "bs=%d, %ss, %s Gbit/s, %s MB/s\n" $obs $elapsed $gigabitpersec $megabytepersec
 
   # increase block size
   obs=$(( $obs * 2 ))
 done
+
+rm $if
 
 rm $if

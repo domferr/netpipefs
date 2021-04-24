@@ -472,11 +472,11 @@ int netpipe_recv(struct netpipe *file, size_t size, void (*poll_notify)(void *))
             netpipe_unlock(file);
             return bytes;
         }
-        dataread += toberead;
-        DEBUG("read[%s] %ld bytes\n", file->path, toberead);
+        dataread += bytes;
+        DEBUG("read[%s] %ld bytes\n", file->path, bytes);
 
-        req->bytes_processed += toberead;
-        remaining -= toberead;
+        req->bytes_processed += bytes;
+        remaining -= bytes;
         if (req->bytes_processed == req->size) {
             PTH(err, pthread_cond_signal(&(req->waiting)), return dataread);
             if (req_list->tail == req) req_list->tail = NULL;
@@ -613,7 +613,7 @@ static size_t send_data(struct netpipe *file) {
 
         err = do_send(file, bufptr, remaining, &bytes);
         if (err <= 0) {
-            if (err == 0) req->error = ECONNRESET;
+            if (err == 0) req->error = ECONNRESET; //TODO ENOTCONN
             else req->error = errno;
             PTH(err, pthread_cond_signal(&(req->waiting)), err = -1)
             if (req_list->tail == req) req_list->tail = NULL;
