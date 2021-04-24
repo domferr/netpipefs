@@ -192,7 +192,6 @@ int netpipe_unlock(struct netpipe *file) {
 
 int netpipe_open(struct netpipe *file, int mode, int nonblock) {
     int err, bytes;
-    size_t buffer_capacity;
 
     /* both read and write access is not allowed */
     if (mode == O_RDWR) {
@@ -240,14 +239,6 @@ int netpipe_open(struct netpipe *file, int mode, int nonblock) {
         goto undo_open;
     }
 
-    /* Alloc buffer */
-    buffer_capacity = file->open_mode == O_WRONLY ? netpipefs_options.writeahead : netpipefs_options.readahead;
-    if (cbuf_capacity(file->buffer) == 0 && buffer_capacity > 0) {
-        cbuf_free(file->buffer);
-        file->buffer = cbuf_alloc(buffer_capacity);
-        if (file->buffer == NULL) goto undo_open;
-    }
-
     DEBUGFILE(file);
 
     NOTZERO(netpipe_unlock(file), goto undo_open)
@@ -269,6 +260,7 @@ undo_open:
 
 int netpipe_open_update(struct netpipe *file, int mode) {
     int err;
+    size_t buffer_capacity;
 
     if (mode == O_RDWR) {
         errno = EPERM;
@@ -279,6 +271,14 @@ int netpipe_open_update(struct netpipe *file, int mode) {
 
     if (mode == O_RDONLY) file->readers++;
     else if (mode == O_WRONLY) file->writers++;
+
+    /* Alloc buffer */
+    buffer_capacity = mode == O_WRONLY ? netpipefs_options.readahead : netpipefs_options.writeahead;
+    if (cbuf_capacity(file->buffer) == 0 && buffer_capacity > 0) {
+        cbuf_free(file->buffer);
+        file->buffer = cbuf_alloc(buffer_capacity);
+        if (file->buffer == NULL) goto undo_open;
+    }
 
     DEBUGFILE(file);
 
