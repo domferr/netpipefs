@@ -17,267 +17,28 @@
 #include <errno.h>
 #include <time.h>
 #include <pthread.h>
-#include <sys/stat.h>
 #include "../include/utils.h"
 #include "../include/scfiles.h"
-#include <sys/socket.h>
-#include <sys/un.h>
 
-#define PRODUCER_FILEPATH "./tmp/prod/mypipe.txt"
-#define CONSUMER_FILEPATH "./tmp/cons/mypipe.txt"
-#define NAMEDPIPE_FILEPATH "/tmp/namedpipe.txt"
-#define SOCKET_FILEPATH "/tmp/socketbench.sock"
+static size_t startbs = 1024;
+static size_t maxbs = 4096;
+static size_t writers = 1;
+static size_t readers = 1;
+static int can_send = 1;
 
-typedef struct arg {
-    int fd;
-    const char *path;
-    size_t data_block;
-    size_t iterations;
-    struct timespec bench;
-    int error;
-} arg_t;
+static pthread_mutex_t writersmtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t writerwait = PTHREAD_COND_INITIALIZER;
 
-#define ARG_INIZIALIZER_FD(fd, datablock, iterations) { fd, NULL, datablock, iterations, {-1,-1}, 0 }
-#define ARG_INIZIALIZER(path, datablock, iterations) { -1, path, datablock, iterations, {-1,-1}, 0 }
+static pthread_mutex_t readersmtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t readerwait = PTHREAD_COND_INITIALIZER;
+static size_t readers_ready = 0;
+static size_t readers_done = 0;
+static size_t can_read = 0;
 
 /* Converts a timespec to a fractional number of seconds.
  * From: https://github.com/solemnwarning/timespec/blob/master/timespec.c
  */
 #define TIMESPEC_TO_DOUBLE(ts) ((double)((ts).tv_sec) + ((double)((ts).tv_nsec) / 1000000000))
-
-#define LOGBENCH(name, write, read) \
-    fprintf(stdout, "[%s] write: %fs, read: %fs\n", \
-        name, TIMESPEC_TO_DOUBLE(write), TIMESPEC_TO_DOUBLE(read))
-
-static arg_t *arg_alloc(int fd, const char *path, size_t datablock, size_t iter) {
-    arg_t *arg = (arg_t *) malloc(sizeof(arg_t));
-    if (arg == NULL) return NULL;
-
-    arg->fd = fd;
-    arg->path = path;
-    arg->data_block = datablock;
-    arg->iterations = iter;
-    arg->bench.tv_sec = -1;
-    arg->bench.tv_nsec = -1;
-    arg->error = 0;
-
-    return arg;
-}
-
-static int send_data(arg_t *arg) {
-    struct timespec start;
-    int wrote = 1, doclose = 0;
-    arg->bench.tv_sec = -1;
-    arg->bench.tv_nsec = -1;
-    arg->error = 0;
-
-    if (arg->path != NULL) {
-        doclose = 1;
-        arg->fd = open(arg->path, O_WRONLY);
-    }
-    if (doclose && arg->fd == -1) {
-        arg->error = errno;
-        return 0;
-    }
-
-    size_t datalen = arg->data_block / sizeof(int);
-    int dummydata[datalen];
-    for (int i = 0; i < datalen; ++i) {
-        dummydata[i] = i;
-    }
-
-    /* Get current time */
-    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
-        arg->error = errno;
-        if (doclose) close(arg->fd);
-        return 0;
-    }
-
-    size_t i = 0;
-    while(wrote > 0 && i < arg->iterations) {
-        wrote = writen(arg->fd, dummydata, datalen);
-        i++;
-    }
-
-    if (wrote > 0) {
-        /* Get elapsed time from start to now */
-        arg->bench = elapsed_time(&start);
-        if (arg->bench.tv_sec == -1) {
-            arg->error = errno;
-            if (doclose) close(arg->fd);
-            return 0;
-        }
-    } else {
-        arg->bench.tv_sec = -1;
-        arg->bench.tv_nsec = -1;
-        arg->error = errno;
-    }
-
-    if (doclose) close(arg->fd);
-
-    return wrote;
-}
-
-static void *recv_data(void *arguments) {
-    struct timespec start;
-    arg_t *arg = (arg_t*) arguments;
-    arg->bench.tv_sec = -1;
-    arg->bench.tv_nsec = -1;
-    arg->error = 0;
-    int read = 1, doclose = 0;
-
-    if (arg->path != NULL) {
-        doclose = 1;
-        arg->fd = open(arg->path, O_RDONLY);
-    }
-    if (arg->fd == -1) {
-        arg->error = errno;
-        return 0;
-    }
-
-    size_t datalen = arg->data_block / sizeof(int);
-    int data[datalen];
-
-    /* Get current time */
-    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
-        arg->error = errno;
-        if (doclose) close(arg->fd);
-        return 0;
-    }
-
-    size_t i = 0;
-    while(read > 0 && i < arg->iterations) {
-        read = readn(arg->fd, data, datalen);
-        i++;
-    }
-
-    if (read > 0) {
-        /* Get elapsed time from start to now */
-        arg->bench = elapsed_time(&start);
-        if (arg->bench.tv_nsec == -1) {
-            arg->error = errno;
-            if (doclose) close(arg->fd);
-            return 0;
-        }
-    } else {
-        arg->bench.tv_sec = -1;
-        arg->bench.tv_nsec = -1;
-        arg->error = errno;
-    }
-
-    if (doclose) close(arg->fd);
-
-    return 0;
-}
-
-static int with_netpipe(size_t prod_data_block, size_t prod_iterations, size_t cons_data_block, size_t cons_iterations) {
-    int err, prod_ret;
-    pthread_t pcons;
-
-    arg_t *cons_arg = arg_alloc(-1, CONSUMER_FILEPATH, cons_data_block, cons_iterations);
-    if (cons_arg == NULL) return -1;
-
-    // Create thread for receiving data (consumer)
-    PTHERR(err, pthread_create(&pcons, NULL, &recv_data, cons_arg), return -1)
-
-    // Send data (producer)
-    arg_t prod_arg = ARG_INIZIALIZER(PRODUCER_FILEPATH, prod_data_block, prod_iterations);
-    prod_ret = send_data(&prod_arg);
-    if (prod_ret <= 0) perror("[NETPIPE] send_data failure");
-
-    // Join consumer thread
-    PTHERR(err, pthread_join(pcons, NULL), return -1)
-
-    // Print consumer error
-    if (cons_arg->error != 0) fprintf(stderr, "[NETPIPE] recv_data failure: %s\n", strerror(cons_arg->error));
-
-    if (cons_arg->error == 0 && prod_ret > 0)
-        LOGBENCH("NETPIPE", prod_arg.bench, cons_arg->bench);
-
-    free(cons_arg);
-    return 0;
-}
-
-static int with_namedpipe(size_t prod_data_block, size_t prod_iterations, size_t cons_data_block, size_t cons_iterations) {
-    int err, prod_ret;
-    pthread_t pcons;
-
-    // Create named pipe
-    MINUS1ERR(mkfifo(NAMEDPIPE_FILEPATH, 0666), return -1)
-
-    arg_t *cons_arg = arg_alloc(-1, NAMEDPIPE_FILEPATH, cons_data_block, cons_iterations);
-    if (cons_arg == NULL) return -1;
-
-    // Create thread for receiving data (consumer)
-    PTHERR(err, pthread_create(&pcons, NULL, &recv_data, cons_arg), unlink(NAMEDPIPE_FILEPATH); return -1)
-
-    // Send data (producer)
-    arg_t prod_arg = ARG_INIZIALIZER(NAMEDPIPE_FILEPATH, prod_data_block, prod_iterations);
-    prod_ret = send_data(&prod_arg);
-    if (prod_ret <= 0) perror("[NAMED PIPE] send_data failure");
-
-    // Join consumer thread
-    PTHERR(err, pthread_join(pcons, NULL), unlink(NAMEDPIPE_FILEPATH); return -1)
-
-    // Print consumer error
-    if (cons_arg->error != 0) fprintf(stderr, "[NAMED PIPE] recv_data failure: %s\n", strerror(cons_arg->error));
-
-    LOGBENCH("NAMED PIPE", prod_arg.bench, cons_arg->bench);
-
-    // Unlink named pipe
-    unlink(NAMEDPIPE_FILEPATH);
-
-    free(cons_arg);
-    return 0;
-}
-
-static int with_socket(size_t prod_data_block, size_t prod_iterations, size_t cons_data_block, size_t cons_iterations) {
-    int err, prod_ret, prodfd, consfd, srvfd;
-    struct sockaddr_un sa;
-    pthread_t pcons;
-
-    // sock address
-    strncpy(sa.sun_path, SOCKET_FILEPATH, 108);
-    sa.sun_family = AF_UNIX;
-    // bind and listen
-    MINUS1ERR(srvfd = socket(AF_UNIX, SOCK_STREAM, 0), return -1)
-    MINUS1ERR(bind(srvfd, (struct sockaddr *) &sa, sizeof(sa)), close(srvfd); return -1)
-    MINUS1ERR(listen(srvfd, SOMAXCONN), close(srvfd); return -1)
-    // connect
-    MINUS1ERR(prodfd = socket(AF_UNIX, SOCK_STREAM, 0), close(srvfd); return -1)
-    MINUS1ERR(connect(prodfd, (struct sockaddr *) &sa, sizeof(sa)), close(srvfd); close(prodfd); return -1)
-    // accept
-    MINUS1ERR(consfd = accept(srvfd, NULL, 0), close(srvfd); close(prodfd); return -1)
-    close(srvfd); // not needed to accept anymore
-
-    arg_t *cons_arg = arg_alloc(consfd, NULL, cons_data_block, cons_iterations);
-    if (cons_arg == NULL) return -1;
-
-    // Create thread for receiving data (consumer)
-    PTHERR(err, pthread_create(&pcons, NULL, &recv_data, cons_arg), return -1)
-
-    // Send data (producer)
-    arg_t prod_arg = ARG_INIZIALIZER_FD(prodfd, prod_data_block, prod_iterations);
-    prod_ret = send_data(&prod_arg);
-    if (prod_ret <= 0) perror("[SOCKET] send_data failure");
-
-    // Join consumer thread
-    PTHERR(err, pthread_join(pcons, NULL), return -1)
-
-    // Print consumer error
-    if (cons_arg->error != 0) fprintf(stderr, "[SOCKET] recv_data failure: %s\n", strerror(cons_arg->error));
-
-    if (cons_arg->error == 0 && prod_ret > 0)
-        LOGBENCH("SOCKET", prod_arg.bench, cons_arg->bench);
-
-    // Close sockets and unlink file
-    close(prodfd);
-    close(consfd);
-    unlink(sa.sun_path);
-
-    free(cons_arg);
-    return 0;
-}
 
 /** From string to integer. Returns -1 on error */
 static int str_to_int(char *str) {
@@ -286,28 +47,293 @@ static int str_to_int(char *str) {
     return endptr == str ? -1:val;
 }
 
-int main(int argc, char** argv) {
-    int ret;
-    if (argc != 5) {
-        fprintf(stderr, "usage: %s <prod_data_block> <prod_iterations> <cons_data_block> <cons_iterations>\n", argv[0]);
-        return EXIT_SUCCESS;
+typedef struct arg_s {
+    pthread_t tid;
+    int error;
+    int (*fun)(char *, size_t); // function to be executed and measured
+    char *path;
+} arg_t;
+
+static int send_data(int fd, size_t size) {
+    char *buf = (char*) malloc(sizeof(char) * size);
+    if (buf == NULL) return -1;
+    int err = writen(fd, buf, size);
+    free(buf);
+
+    return err;
+}
+
+static int recv_data(int fd, size_t size) {
+    char *buf = (char*) malloc(sizeof(char) * size);
+    if (buf == NULL) return -1;
+    int err = readn(fd, buf, size);
+    free(buf);
+
+    return err;
+}
+
+static void log_bench(int isread, size_t size, double seconds) {
+    static const char *SIZES[] = { "B", "KB", "MB", "GB" };
+    size_t div = 0;
+    size_t rem = 0;
+    size_t tmpsize = size;
+    float megabytes = (float) size / (1024*1024), convsize;
+
+    while (tmpsize >= 1024 && div < (sizeof SIZES / sizeof *SIZES)) {
+        rem = (tmpsize % 1024);
+        div++;
+        tmpsize /= 1024;
+    }
+    convsize = (float)tmpsize + (float)rem / 1024.0;
+
+    printf("%ld bytes %s (%.1f %s), %.5f s, %.2f MB/s\n", size, (isread ? "read":"written"), convsize, SIZES[div], seconds, megabytes/seconds);
+}
+
+int writefun(char *path, size_t blocksize) {
+    int writefd, err, datasent;
+    struct timespec start, elapsed;
+    double time; //in seconds
+    blocksize /= writers;
+
+    //PTH(err, pthread_mutex_lock(&writersmtx), return -1)
+    /*writers_ready++;
+    if (writers_ready == writers) {
+        PTH(err, pthread_cond_broadcast(&writerwait), return -1)
+        writers_done = 0;
     }
 
-    size_t prod_data_block, prod_iterations, cons_data_block, cons_iterations;
+    while(writers_ready != writers || !can_send) {
+        PTH(err, pthread_cond_wait(&writerwait, &writersmtx), return -1)
+    }*/
+    /*
+    PTH(err, pthread_mutex_lock(&writersmtx), return -1)
+    while(can_send == 0) {
+        PTH(err, pthread_cond_wait(&writerwait, &writersmtx), return -1)
+    }
+    can_send--;
+    PTH(err, pthread_mutex_unlock(&writersmtx), return -1)*/
 
-    if ((prod_data_block = (size_t) str_to_int(argv[1])) == -1) return EXIT_FAILURE;
-    if ((prod_iterations = (size_t) str_to_int(argv[2])) == -1) return EXIT_FAILURE;
-    if ((cons_data_block = (size_t) str_to_int(argv[3])) == -1) return EXIT_FAILURE;
-    if ((cons_iterations = (size_t) str_to_int(argv[4])) == -1) return EXIT_FAILURE;
+    // Open
+    writefd = open(path, O_WRONLY);
+    if (writefd == -1) return -1;
 
-    ret = with_namedpipe(prod_data_block, prod_iterations, cons_data_block, cons_iterations);
-    if (ret == -1) return EXIT_FAILURE;
+    // Get start time
+    err = clock_gettime(CLOCK_MONOTONIC, &start);
+    if (err == -1) return -1;
 
-    ret = with_netpipe(prod_data_block, prod_iterations, cons_data_block, cons_iterations);
-    if (ret == -1) return EXIT_FAILURE;
+    datasent = send_data(writefd, blocksize);
+    if (datasent == -1) return -1;
 
-    ret = with_socket(prod_data_block, prod_iterations, cons_data_block, cons_iterations);
-    if (ret == -1) return EXIT_FAILURE;
+    // Get elapsed time
+    elapsed = elapsed_time(&start);
+    time = TIMESPEC_TO_DOUBLE(elapsed);
 
+    // Wait other writers
+    /*PTH(err, pthread_mutex_lock(&writersmtx), return -1)
+    writers_done++;
+    if (writers_done == writers) {
+        can_send = 0;
+        writers_ready = 0;
+        PTH(err, pthread_cond_broadcast(&writerwait), return -1)
+    }
+
+    while(writers_done != writers) {
+        PTH(err, pthread_cond_wait(&writerwait, &writersmtx), return -1)
+    }*/
+
+    // Wait other readers
+    PTH(err, pthread_mutex_lock(&readersmtx), return -1)
+    while(readers_done != readers) {
+        PTH(err, pthread_cond_wait(&readerwait, &readersmtx), return -1)
+    }
+    PTH(err, pthread_mutex_unlock(&readersmtx), return -1)
+
+    // Log benchmark
+    PTH(err, pthread_mutex_lock(&writersmtx), return -1)
+    log_bench(0, datasent, time);
+    PTH(err, pthread_mutex_unlock(&writersmtx), return -1)
+
+    close(writefd);
+    return err;
+}
+
+int readfun(char *path, size_t blocksize) {
+    int readfd, err, dataread;
+    struct timespec start, elapsed;
+    double time; //in seconds
+    blocksize /= readers;
+
+    // Wait other readers to be ready
+    /*PTH(err, pthread_mutex_lock(&readersmtx), return -1)
+    readers_ready++;
+    if (readers_ready == readers) {
+        PTH(err, pthread_cond_broadcast(&readerwait), return -1)
+        readers_done = 0;
+        can_read = readers;
+
+        // Wake up all the writers
+        PTH(err, pthread_mutex_lock(&writersmtx), return -1)
+        can_send = writers;
+        PTH(err, pthread_cond_broadcast(&writerwait), return -1)
+        PTH(err, pthread_mutex_unlock(&writersmtx), return -1)
+    }
+
+    while(can_read == 0) {
+        PTH(err, pthread_cond_wait(&readerwait, &readersmtx), return -1)
+    }
+    can_read--;
+    readers_ready--;
+
+    PTH(err, pthread_mutex_unlock(&readersmtx), return -1)*/
+
+    // open path
+    readfd = open(path, O_RDONLY);
+    if (readfd == -1) return -1;
+
+    // Get start time
+    err = clock_gettime(CLOCK_MONOTONIC, &start);
+    if (err == -1) return -1;
+
+    dataread = recv_data(readfd, blocksize);
+    if (dataread == -1) return -1;
+
+    // Get elapsed time
+    elapsed = elapsed_time(&start);
+    time = TIMESPEC_TO_DOUBLE(elapsed);
+
+    // Wait other readers
+    PTH(err, pthread_mutex_lock(&readersmtx), return -1)
+    // Log benchmark
+    log_bench(1, dataread, time);
+
+    readers_done++;
+    if (readers_done == readers) {
+        PTH(err, pthread_cond_broadcast(&readerwait), return -1)
+        readers_ready = 0;
+    }
+
+    while(readers_done != readers) {
+        PTH(err, pthread_cond_wait(&readerwait, &readersmtx), return -1)
+    }
+
+    PTH(err, pthread_mutex_unlock(&readersmtx), return -1)
+
+    // close
+    close(readfd);
+
+    return err;
+}
+
+void *worker(void *argument) {
+    int err = 0;
+    arg_t *arg = (arg_t*) argument;
+    size_t blocksize = startbs;
+
+    //while(err == 0 && blocksize <= maxbs) {
+        err = arg->fun(arg->path, blocksize);
+        //blocksize = blocksize * 2;
+        //sleep(1);
+    //}
+
+    if (err != 0) arg->error = errno;
+
+    return 0;
+}
+
+static void usage(char *progname) {
+    fprintf(stderr, "usage: %s <write_file> <read_file> <max_block_size> <readers> <writers>\n", progname);
+}
+
+int main(int argc, char** argv) {
+    int err;
+    size_t i;
+    if (argc < 4) {
+        usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+    MINUS1(err = str_to_int(argv[3]), usage(argv[0]); return EXIT_FAILURE);
+    maxbs = err;
+    startbs = maxbs;
+
+    if (argc >= 5) {
+        MINUS1(err = str_to_int(argv[4]), usage(argv[0]); return EXIT_FAILURE);
+        readers = err;
+    }
+
+    if (argc >= 6) {
+        MINUS1(err = str_to_int(argv[5]), usage(argv[0]); return EXIT_FAILURE);
+        writers = err;
+    }
+    can_send = writers;
+
+    arg_t **argwriters = (arg_t**) malloc(sizeof(arg_t*) * writers);
+    if (argwriters == NULL) return -1;
+
+    for (i=0; i<writers; i++) {
+        argwriters[i] = (arg_t *) malloc(sizeof(arg_t));
+        EQNULLERR(argwriters[i], return -1)
+        argwriters[i]->error = 0;
+        argwriters[i]->fun = writefun;
+        argwriters[i]->path = argv[1];
+
+        err = pthread_create(&(argwriters[i]->tid), NULL, worker, argwriters[i]);
+        if (err != 0) {
+            errno = err;
+            perror("cannot create writer thread");
+            free(argwriters);
+            exit(1);
+        }
+    }
+    //printf("writers are running\n");
+
+    arg_t **argreaders = (arg_t**) malloc(sizeof(arg_t*) * readers);
+    if (argreaders == NULL) return -1;
+
+    for (i=0; i<readers; i++) {
+        argreaders[i] = (arg_t *) malloc(sizeof(arg_t));
+        EQNULLERR(argreaders[i], return -1)
+        argreaders[i]->error = 0;
+        argreaders[i]->fun = readfun;
+        argreaders[i]->path = argv[2];
+
+        err = pthread_create(&(argreaders[i]->tid), NULL, worker, argreaders[i]);
+        if (err != 0) {
+            errno = err;
+            perror("cannot create reader thread");
+            exit(1);
+        }
+    }
+    //printf("readers are running\n");
+
+    for (i=0; i<writers; i++) {
+        err = pthread_join(argwriters[i]->tid, NULL);
+        if (err != 0) {
+            errno = err;
+            perror("cannot join writer thread");
+            exit(1);
+        }
+        if (argwriters[i]->error != 0) {
+            printf("writer %ld: %s\n", i, strerror(argwriters[i]->error));
+        }
+        free(argwriters[i]);
+    }
+    //printf("writers ended\n");
+
+    for (i=0; i<readers; i++) {
+        err = pthread_join(argreaders[i]->tid, NULL);
+        if (err != 0) {
+            errno = err;
+            perror("cannot join reader thread");
+            exit(1);
+        }
+        if (argreaders[i]->error != 0) {
+            printf("reader %ld: %s\n", i, strerror(argreaders[i]->error));
+        }
+        free(argreaders[i]);
+    }
+    //printf("readers ended\n");
+
+    free(argwriters);
+    free(argreaders);
     return 0;
 }

@@ -59,7 +59,7 @@ do
 #  # wait all the processes to complete
 #  wait
 
-  ./bin/benchmark $namedpipe $namedpipe $bs $writers $readers
+  ./bin/benchmark ./tmp/prod/bench ./tmp/cons/bench $bs $writers $readers
 
   # increase block size
   bs=$(( $bs * 2 ))
