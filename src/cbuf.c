@@ -40,7 +40,10 @@ void cbuf_free(cbuf_t *cbuf) {
 }
 
 size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
-    size_t put = 0;
+    if (cbuf->capacity == 0) return 0;
+
+    return cbuf_put_memcpy(cbuf, data, size);
+    /*size_t put = 0;
     if (cbuf->capacity == 0) return 0;
 
     while(put < size && !cbuf->isfull) {
@@ -50,11 +53,14 @@ size_t cbuf_put(cbuf_t *cbuf, const char *data, size_t size) {
         put++;
         cbuf->isfull = cbuf->head == cbuf->tail;
     }
-    return put;
+    return put;*/
 }
 
 size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
-    size_t got = 0;
+    if (cbuf->capacity == 0) return 0;
+
+    return cbuf_get_memcpy(cbuf, data, size);
+    /*size_t got = 0;
     if (cbuf->capacity == 0) return 0;
 
     while(got < size && !cbuf_empty(cbuf)) {
@@ -64,7 +70,7 @@ size_t cbuf_get(cbuf_t *cbuf, char *data, size_t size) {
         got++;
         cbuf->isfull = 0;
     }
-    return got;
+    return got;*/
 }
 
 size_t cbuf_get_memcpy(cbuf_t *cbuf, char *data, size_t size) {

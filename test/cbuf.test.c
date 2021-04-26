@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <time.h>
 #include "testutilities.h"
 #include "../include/cbuf.h"
 
@@ -7,6 +8,41 @@ static void test_zero_capacity(void);
 static void test_from_file_descriptor(void);
 
 int main(int argc, char** argv) {
+    size_t capacity = 8192;
+    char *bufptr = (char*) malloc(sizeof(char)*capacity);
+    /* Alloc buffer */
+    cbuf_t *buffer = cbuf_alloc(capacity);
+    struct timespec tw1, tw2;
+    double elapsed;
+
+    cbuf_put(buffer, bufptr, capacity);
+    clock_gettime(CLOCK_MONOTONIC, &tw1);
+    size_t read = cbuf_get_memcpy(buffer, bufptr, capacity);
+    clock_gettime(CLOCK_MONOTONIC, &tw2);
+
+    elapsed = 1000.0*tw2.tv_sec + 1e-6*tw2.tv_nsec - (1000.0*tw1.tv_sec + 1e-6*tw1.tv_nsec);
+    printf("%ld elapsed %.6fs\n", read, elapsed);
+
+    cbuf_free(buffer);
+    free(bufptr);
+
+    capacity = 16384;
+    bufptr = (char*) malloc(sizeof(char)*capacity);
+
+    /* Alloc buffer */
+    buffer = cbuf_alloc(capacity);
+    cbuf_put(buffer, bufptr, capacity);
+
+    clock_gettime(CLOCK_MONOTONIC, &tw1);
+    read = cbuf_get_memcpy(buffer, bufptr, capacity);
+    clock_gettime(CLOCK_MONOTONIC, &tw2);
+
+    elapsed = 1000.0*tw2.tv_sec + 1e-6*tw2.tv_nsec - (1000.0*tw1.tv_sec + 1e-6*tw1.tv_nsec);
+    printf("%ld elapsed %.6fs\n", read, elapsed);
+
+    cbuf_free(buffer);
+    free(bufptr);
+
     test_operations();
     test_zero_capacity();
     test_from_file_descriptor();

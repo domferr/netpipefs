@@ -12,7 +12,7 @@ MAXBS=$(< ./tmp/cons/maxbs)
 #while [ $curribs -le $MAXBS ]
 #do
   # read
-  dd if=$netpipe of=/dev/null bs=$ibs 2>&1 | grep -a copied
+  dd if=$netpipe of=/dev/null bs=$1 2>&1 | grep -a copied
 
   # notify the writer that reading is done
   echo 1 | nc -N localhost 8787
