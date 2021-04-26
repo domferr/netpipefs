@@ -1,48 +1,48 @@
 Block size=1024 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.961414 s, 34.9 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.961663 s, 34.9 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.991213 s, 33.9 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.991503 s, 33.8 MB/s
 Block size=2048 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.520312 s, 64.5 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.520501 s, 64.5 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.506133 s, 66.3 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.506306 s, 66.3 MB/s
 Block size=4096 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.294476 s, 114 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.294655 s, 114 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.266511 s, 126 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.266796 s, 126 MB/s
 Block size=8192 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.185221 s, 181 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.185363 s, 181 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.142508 s, 235 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.142703 s, 235 MB/s
 Block size=16384 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.129275 s, 260 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.129443 s, 259 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.081564 s, 411 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0818099 s, 410 MB/s
 Block size=32768 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.106101 s, 316 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.106296 s, 316 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0516974 s, 649 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.051902 s, 646 MB/s
 Block size=65536 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0824345 s, 407 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0827181 s, 406 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.039364 s, 852 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0395293 s, 849 MB/s
 Block size=131072 bytes
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.050539 s, 664 MB/s
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0503403 s, 667 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0319925 s, 1.0 GB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0322251 s, 1.0 GB/s
 Block size=262144 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0536052 s, 626 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0537847 s, 624 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0342942 s, 978 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0347791 s, 965 MB/s
 Block size=524288 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.056645 s, 592 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0568434 s, 590 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0362503 s, 926 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0366508 s, 916 MB/s
 Block size=1048576 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0583369 s, 575 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0585466 s, 573 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0398483 s, 842 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0404394 s, 830 MB/s
 Block size=2097152 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0605381 s, 554 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0607542 s, 552 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0436185 s, 769 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0441227 s, 760 MB/s
 Block size=4194304 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0593185 s, 566 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0594901 s, 564 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.041237 s, 814 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0415402 s, 808 MB/s
 Block size=8388608 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0623177 s, 538 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0625251 s, 537 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0405359 s, 828 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0408226 s, 822 MB/s
 Block size=16777216 bytes
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.0634264 s, 529 MB/s
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0636516 s, 527 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.041989 s, 799 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0422638 s, 794 MB/s
 Block size=33554432 bytes
-[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0706965 s, 475 MB/s
-[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.070505 s, 476 MB/s
+[Write] 33554432 bytes (34 MB, 32 MiB) copied, 0.050235 s, 668 MB/s
+[Read ] 33554432 bytes (34 MB, 32 MiB) copied, 0.0505231 s, 664 MB/s
