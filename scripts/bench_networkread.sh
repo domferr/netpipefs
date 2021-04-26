@@ -9,14 +9,14 @@ curribs=1024
 # read max block size
 MAXBS=$(< ./tmp/cons/maxbs)
 
-while [ $curribs -le $MAXBS ]
-do
+#while [ $curribs -le $MAXBS ]
+#do
   # read
   dd if=$netpipe of=/dev/null bs=$ibs 2>&1 | grep -a copied
 
   # notify the writer that reading is done
-  echo 1 | nc -N repara 8787
+  echo 1 | nc -N localhost 8787
 
   # increase block size
   curribs=$(( $curribs * 2 ))
-done
+#done

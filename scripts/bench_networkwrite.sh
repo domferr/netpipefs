@@ -9,7 +9,7 @@ if [ $# -lt 1 ]; then
 fi
 
 maxbs=$1 # max block size
-obs=1024 # starting write blocksize
+obs=$2 # starting write blocksize
 
 # file to be sent
 if=./data.bin
@@ -22,11 +22,9 @@ dd if=/dev/zero of=$if bs=$maxbs count=1 2>&1 | grep copied
 
 # send max block
 echo $maxbs > ./tmp/prod/maxbs
-# netpipe used to sync reader and writer
-syncpipe=./tmp/prod/sync
 
-while [ $obs -le $maxbs ]
-do
+#while [ $obs -le $maxbs ]
+#do
   start_time="$(date -u +%s.%N)"
 
   # write
@@ -44,8 +42,6 @@ do
 
   # increase block size
   obs=$(( $obs * 2 ))
-done
-
-rm $if
+#done
 
 rm $if
