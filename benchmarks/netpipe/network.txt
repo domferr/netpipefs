@@ -1,3 +1,48 @@
+Il lettore legge con scripts/bench_networkread.sh $((2**15))
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**6))
+16777216 bytes (17 MB, 16 MiB) copied, 7.50315 s, 2.2 MB/s
+bs=64, 7.510655609s, .0166 Gbit/s, 2.1303 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**7))
+16777216 bytes (17 MB, 16 MiB) copied, 3.29152 s, 5.1 MB/s
+bs=128, 3.298771396s, .0378 Gbit/s, 4.8502 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**8))
+16777216 bytes (17 MB, 16 MiB) copied, 1.72745 s, 9.7 MB/s
+bs=256, 1.734698484s, .0720 Gbit/s, 9.2235 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**9))
+16777216 bytes (17 MB, 16 MiB) copied, 0.951049 s, 17.6 MB/s
+bs=512, .958452346s, .1304 Gbit/s, 16.6935 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**10))
+16777216 bytes (17 MB, 16 MiB) copied, 0.491202 s, 34.2 MB/s
+bs=1024, .498877964s, .2505 Gbit/s, 32.0719 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**11))
+16777216 bytes (17 MB, 16 MiB) copied, 0.237472 s, 70.6 MB/s
+bs=2048, .245008721s, .5101 Gbit/s, 65.3037 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**12))
+16777216 bytes (17 MB, 16 MiB) copied, 0.141614 s, 118 MB/s
+bs=4096, .150513498s, .8304 Gbit/s, 106.3027 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**13))
+16777216 bytes (17 MB, 16 MiB) copied, 0.141587 s, 118 MB/s
+bs=8192, .150539123s, .8303 Gbit/s, 106.2846 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**14))
+16777216 bytes (17 MB, 16 MiB) copied, 0.141621 s, 118 MB/s
+bs=16384, .150527219s, .8304 Gbit/s, 106.2930 MB/s
+
+ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**24)) $((2**15))
+16777216 bytes (17 MB, 16 MiB) copied, 0.141582 s, 118 MB/s
+bs=32768, .150330201s, .8315 Gbit/s, 106.4323 MB/s
+ferraro@repara:~/netpipefs$
+
+---------------------------------------------------------------
+
 ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**21)) $((2**21))
 2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0182145 s, 115 MB/s
 bs=2097152, .027184402s, .5747 Gbit/s, 73.5716 MB/s
@@ -45,6 +90,8 @@ bs=2048, .035090244s, .4452 Gbit/s, 56.9958 MB/s
 ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**21)) $((2**10))
 2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.0586511 s, 35.8 MB/s
 bs=1024, .065815735s, .2374 Gbit/s, 30.3878 MB/s
+
+----------------------------------------------------------------------
 
 ferraro@repara:~/netpipefs$ scripts/bench_networkwrite.sh $((2**21)) $((2**6))
 2097152 bytes (2.1 MB, 2.0 MiB) copied, 0.815017 s, 2.6 MB/s
